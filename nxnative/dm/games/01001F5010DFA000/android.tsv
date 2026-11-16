@@ -1,6 +1,6 @@
 # Pokémon Legends: Arceus on Android (keys in docs/ARCHITECTURE.md "Game profiles on Android")
 # Game Freak's engine on SDK 11.4.0; game.tsv and the shader tables are upstream's, checked by hand. 73 of its 12,851 shaders live only in Oodle Kraken GFPAK entries:
-# the porter decodes them with the game's own decoder on the device (dmhost, DM_OODLE_JOB), so a port needs the device connected.
+# the porter decodes them with the game's own decoder (dmhost, DM_OODLE_JOB): on the device the port already uses, or on the phone itself when the porter runs there.
 # On the Y700 (2026-10-30), docked and handheld, driven with DM_CTL: the opening (Arceus, the name, the fall), the beach with Laventon and the starters, the first walks.
 # Recorded there with patches.py's 60 fps cut (since taken out): 60 fps, GPU 11-14.6 ms at the beach; a 30-minute soak kept one
 # process at a flat 1,307 MiB footprint with no audio underruns and no red log line. The washed-out picture it first had was the vertex outputs' Maxwell start values
@@ -13,3 +13,4 @@ status	playable
 tested	v262144 AYN Thor (Snapdragon 8 Gen 2, Adreno 740, Android 13)
 package	org.nx2a.plarceus
 orientation	landscape
+graphics	nvn
