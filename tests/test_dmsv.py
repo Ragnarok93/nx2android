@@ -58,7 +58,6 @@ class Bundle(unittest.TestCase):
         e = by[ENTRIES[2][0]]; self.assertEqual((e[6], e[3]), (0, len(ENTRIES[2][2])))   # one zstd does not shrink: stored as it is
         self.assertEqual([e[0] for e in ents], sorted(e[0] for e in ENTRIES))
 
-    @unittest.skipUnless(ZSTD, 'the normal zstd tests cover the installed compressor')
     def test_compression_results_are_bounded_and_spooled(self):
         # A deterministic zstd stand-in lets the test observe executor pressure
         # without relying on machine RAM measurements or timing.
