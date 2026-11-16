@@ -782,7 +782,7 @@ class Port:
         icon = self.icon()
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
-        external = self.external_activity() if self.o.external_display or self.o.native_keyboard or self.o.frame_generation or getattr(self.o, 'vulkan_driver_dir', None) else []
+        external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'frame_generation', False) or getattr(self.o, 'vulkan_driver_dir', None) else []
         driver = self.o.vulkan_driver
         bundled = []; driver_assets = []
         if getattr(self.o, 'vulkan_driver_dir', None):
