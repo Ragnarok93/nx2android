@@ -446,14 +446,17 @@ def main():
             spv, res = product
             binds, local, io = spirv_bindings(spv)
             shader_products.validate_bindings(binds, res)
+            spv_path = Path(w) / f'{k}.spv'
             if k in handle_remaps:
                 spv = remap_handles(spv, *handle_remaps[k])
+                spv_path.write_bytes(spv)
             st = stages[k]
             cl = [classify(st, b, res) for b in binds]
             for e in cl: kinds_all[e['kind']] += 1
             # header words 2-4: a compute shader's local size; a vertex shader's input locations (all, signed int, unsigned int); a pixel shader's output locations
             hdr3 = (local or jobs[k].get('local') or [1, 1, 1]) if st == 'cs' else io[1] if st == 'vs' else io[3] if st == 'ps' else [0, 0, 0]
-            entries.append((gs_var[k] if k in gs_var else int(k, 16), STAGES.get(st, 0), spv, refl_bin(cl, c1s[k], hdr3)))
+            entries.append((gs_var[k] if k in gs_var else int(k, 16), STAGES.get(st, 0), spv_path, refl_bin(cl, c1s[k], hdr3)))
+            del spv
         except Exception as e:
             reason = str(e)
             failed.append([f'{gs_var[k] if k in gs_var else int(k, 16):016x}', reason])
