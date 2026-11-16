@@ -7,7 +7,7 @@ import hashlib, importlib.util, json, os, re, shutil, sys, traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from porter import config, datapack, dumps, fpslocker, install, paths, profiles, product_cache, romfs_pack, toolchain
+from porter import config, datapack, dumps, fpslocker, install, paths, profiles, product_cache, resources, romfs_pack, toolchain
 from porter.adb import NO_ADB, Adb, AdbError
 from porter.paths import DM, NXNATIVE
 from porter.source_archive import build_source_archive
@@ -57,7 +57,7 @@ class Options:
     alias_headroom: int = None         # GB more alias region (alias_headroom); None: ALIAS_HEADROOM for a version the profile was not brought up on, none for one it was
     romfs_at: str = None               # with install: the folder on the device the app reads the RomFS from (porter/install.py), 'app' for its files folder; None: as the device has it
     romfs_push: bool = False           # with romfs_at: push the pack's RomFS into that folder first
-    jobs: int = field(default_factory=lambda: os.cpu_count() or 8)
+    jobs: int = field(default_factory=resources.safe_jobs)
 
 
 # --vulkan-driver: libadrenotools and its hooks (dm/android/build.py --adrenotools, from dm/third_party/libadrenotools), which load the driver for the app
@@ -212,6 +212,10 @@ class Port:
 
     def _run(self):
         o = self.o
+        o.jobs = resources.safe_jobs(o.jobs)
+        if resources.is_android():
+            total, available = resources.memory_mb()
+            say(f'Android memory-aware build: {o.jobs} worker(s) (RAM {total:.0f} MB, available {available:.0f} MB)' if total is not None and available is not None else f'Android memory-aware build: {o.jobs} worker(s) (RAM information unavailable; conservative limit)')
         o.folder = Path(o.folder).expanduser().resolve()
         if not o.folder.is_dir(): raise BuildError(f'not a folder: {o.folder}')
         version_code('v0', o.vercode_offset); alias_headroom_gb(o.alias_headroom)   # an offset or headroom out of range fails now, not after the shaders
@@ -683,6 +687,10 @@ class Port:
 
     # ---- shaders: upstream's split, then SPIR-V for the Vulkan backend ----
     def shaders(self):
+        # Extraction and earlier stages can change available RAM; recalculate immediately before
+        # the process-pool shader split, .NET translation and Zstandard bundle compression.
+        self.o.jobs = resources.safe_jobs(self.o.jobs)
+        self.env['J'] = str(self.o.jobs)
         if getattr(self, 'gl', False):   # an OpenGL ES game: the driver compiles its shaders on the device
             self.dmsv = None
             for st in ('shader split', 'Vulkan shaders'): PROG.stage(st); PROG.end('none: the game renders with OpenGL ES')
