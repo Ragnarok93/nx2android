@@ -95,13 +95,13 @@ class Bundle(unittest.TestCase):
         p = self.d / 'bounded.dmsv'
         with mock.patch.object(dmsv, 'zstd_mod', return_value=fake), mock.patch.object(dmsv.cf, 'ThreadPoolExecutor', BoundedExecutor):
             ver, raw, stored = dmsv.write(str(p), entries, jobs=2)
+            read_ver, got, _ = self.read(p)
         self.assertEqual(ver, 2)
         self.assertEqual(raw, sum(len(e[2]) for e in entries))
         self.assertLess(stored, raw)
         self.assertLessEqual(state['peak'], 4)
         self.assertEqual(state['peak'], 4)
-        ver, got, _ = self.read(p)
-        self.assertEqual((ver, got), (2, sorted(entries)))
+        self.assertEqual((read_ver, got), (2, sorted(entries)))
 
     def test_without_zstd_version1(self):   # a Python without compression.zstd or backports.zstd: version 1, and a [RED] line says why
         p, out = self.d / 'nz.dmsv', io.StringIO()
