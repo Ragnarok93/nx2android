@@ -94,6 +94,8 @@ class PortTab(QWidget):
         self.shared_font = QLineEdit(); self.shared_font.setPlaceholderText('the device\'s Roboto')   # porter port --shared-font
         self.shared_font.setToolTip('A TrueType font (.ttf) to pack as the system font the game asks for.\n'
                                     'One with CJK characters shows the Chinese and Korean text of a game that draws it with the system font.')
+        self.frame_generation = QCheckBox('Frame generation (Lossless Scaling LSFG; import your own Lossless.dll from the in-game Graphics menu)')
+        self.frame_generation.setToolTip('Builds the Java Activity needed for the Lossless.dll file picker. The DLL is proprietary and is never included in the APK. Requires JDK and Android SDK platform/build-tools.')
         self.mt_replay = QCheckBox('Multithread replay: record the game\'s Vulkan commands on a thread of their own (faster in busy scenes; port again to turn it off)')   # porter port --mt-replay
         self.debug = QCheckBox('Development build (debuggable, debug information, DM_CTL key presses)')
         self.experimental = QCheckBox('Experimental: try a game that is not ported to Android yet (it may not start)')
