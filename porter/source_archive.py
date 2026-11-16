@@ -21,6 +21,9 @@ def normalize_title_id(value):
 
 def include_path(name, title):
     parts = name.split("/")
+    base = parts[-1].lower()
+    if base in {"prod.keys", "title.keys", ".env"} or base.startswith(".env."):
+        return False
     if any(part in _SKIP_DIRS for part in parts):
         return False
     if name.startswith(("docs/images/", "nxnative/docs/images/")):
