@@ -89,7 +89,13 @@ The DLL is proprietary and is never bundled or redistributed by this project. Fr
 
 To include several Vulkan drivers in one game's APK, port with `--vulkan-driver-dir <folder>` (a folder of arm64 `.so` libraries). The APK includes the drivers and the pause menu's **Graphics → Vulkan driver** picker lets you choose a bundled driver or **System default**. The choice is saved in the game's `env.txt` and takes effect after restarting the game. This option needs `javac` and an Android SDK with platform and build-tools (`ANDROID_HOME`); `--vulkan-driver <file>` remains available to select one driver at port time.
 
-### Android memory behavior
+### Android port-time memory behavior
+
+Porting automatically limits memory-heavy worker concurrency using Android's total and currently available RAM. Devices with 8 GiB or less use one worker; 12 GiB devices use at most two; 16 GiB devices at most three; larger devices at most four. Below 4 GiB currently available, concurrency is reduced to at most two; below 3 GiB it is one. `--jobs` is an upper bound and cannot override the Android safety limit. This applies to shader splitting, Vulkan translation, shader-bundle Zstandard compression, and other port stages that share the worker setting.
+
+The Vulkan shader exporter memory-maps shader package files instead of retaining copies of every package in Python memory, and releases its per-shader translation jobs, control sections, package mappings, and translator results before compressing the final bundle. Bundle compression already uses a disk-backed spool and a bounded in-flight window, so it no longer overlaps with the full shader-translation working set.
+
+### Android runtime memory behavior
 
 The Vulkan backend bounds its retained buffer-pool caches to 64 MiB each (zero-copy reuse and small-pool slabs) and reclaims inactive, CPU-backed, read-only texture images when tracked Vulkan image allocations exceed 512 MiB. The texture-cache target can be changed in the game's `env.txt` with `DM_VK_TEXTURE_CACHE_MB` (64–4096; default 512). This eviction deliberately does not discard render targets, GPU-written images, sparse textures or active images because their contents may not be recoverable. These are cache limits, not a hard process/GPU-memory ceiling: active game resources, driver allocations, shader modules and Android's own memory pressure remain outside the app's control. Android may still terminate any app under severe system-wide pressure.
 
