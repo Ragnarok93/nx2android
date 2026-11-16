@@ -54,7 +54,7 @@ def _parser():
                          '"AllocateAddressRegion refused (0x1803)" before it crashes; it uses no memory (default: 8 for a game version the profile was not '
                          'brought up on, none for one it was)')
     _romfs_at(po, 'with --install: ')
-    po.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
+    po.add_argument('--jobs', type=int, default=None, help='maximum workers (Android automatically clamps this to a memory-safe limit; default is memory-aware)')
     po.add_argument('--progress', default='auto', choices=('auto', 'bar', 'lines', 'json', 'off'), help='json: one JSON event per line, for the GUI')
     ins = sub.add_parser('install', help='install a port made earlier'); ins.add_argument('data', help='the data pack folder (<App>-data)'); ins.add_argument('--apk', help='the APK (default: <App>.apk beside the pack)')
     ins.add_argument('--device', default=''); ins.add_argument('--replace-signer', action='store_true'); ins.add_argument('--progress', default='auto', choices=('auto', 'bar', 'lines', 'json', 'off'))
