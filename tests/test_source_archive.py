@@ -4,13 +4,13 @@ import tempfile
 import unittest
 import zipfile
 
-from porter.pipeline import corresponding_source_archive
+from porter.source_archive import build_source_archive
 
 
 class SourceArchive(unittest.TestCase):
     def test_archive_contains_native_host_and_license_sources(self):
         with tempfile.TemporaryDirectory(prefix="nx2a_source_") as tmp:
-            archive = corresponding_source_archive(Path(tmp) / "source.zip")
+            archive = build_source_archive(ROOT, Path(tmp) / "source.zip", "0100000000010000")
             self.assertTrue(archive.is_file())
             with zipfile.ZipFile(archive) as z:
                 names = set(z.namelist())
@@ -24,9 +24,12 @@ class SourceArchive(unittest.TestCase):
                 "nxnative/dm/android/dm_framegen.c",
                 "nxnative/dm/android/lsfg/lsfg_chain.c",
                 "nxnative/dm/android/lsfg/COPYING",
+                "nxnative/dm/games/0100000000010000/android.tsv",
             ):
                 self.assertIn(name, names)
             self.assertFalse(any(name.lower().endswith("/lossless.dll") for name in names))
+            self.assertFalse(any(name.startswith("nxnative/dm/games/0100606026F12000/") for name in names))
+            self.assertFalse(any(name.startswith("docs/images/") for name in names))
 
 
 if __name__ == "__main__":
