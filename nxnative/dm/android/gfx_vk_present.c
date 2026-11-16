@@ -891,7 +891,7 @@ static void present_one(vkimg_t *im, VkImage src, int cx, int cy, int cw, int ch
     // The performance HUD's counters: the game's frame (a redraw presents the last one again — not a frame) and the generation's frames
     uint32_t k = g_pi++ % 8;
     vkWaitForFences(V.dev, 1, &g_pfence[k], 1, UINT64_MAX);
-    if (with_meta && im_meta_srgb != g_want) { g_want = im_meta_srgb; swap_destroy(); if (!swap_make()) return; }   // once, at the first present of the other kind
+    if (im_meta_srgb != g_want) { g_want = im_meta_srgb; swap_destroy(); if (!swap_make()) return; }   // once, at the first present of the other kind
     uint32_t idx; VkResult r = vkAcquireNextImageKHR(V.dev, g_swap, UINT64_MAX, g_acq[k], VK_NULL_HANDLE, &idx);
     if (r == VK_ERROR_OUT_OF_DATE_KHR) { swap_destroy(); if (!swap_make()) return; r = vkAcquireNextImageKHR(V.dev, g_swap, UINT64_MAX, g_acq[k], VK_NULL_HANDLE, &idx); }
     if (r < 0) { VKRED_ONCE(90, "vkAcquireNextImageKHR: %d", r); return; }
@@ -981,6 +981,7 @@ static void present_frame(vkimg_t *im, const int crop[4], double period, uint64_
     if (ng < 0) ng = 0; if (ng > 3) ng = 3;
     atomic_store(&g_fg_out_ns, out_period > 0 ? (uint64_t)(out_period * 1e9) : 0);
     atomic_store(&g_fg_images, ng > 0 ? ng + 1 : 1);
+    im_meta_srgb = im->fmt == VK_FORMAT_R8G8B8A8_SRGB || im->fmt == VK_FORMAT_B8G8R8A8_SRGB || im->fmt == VK_FORMAT_A8B8G8R8_SRGB_PACK32 ? VK_FORMAT_R8G8B8A8_SRGB : VK_FORMAT_R8G8B8A8_UNORM;
     int cx = crop ? crop[0] : 0, cy = crop ? crop[1] : 0;
     int cw = crop && crop[2] > 0 ? crop[2] : (int)im->w;
     int ch = crop && crop[3] > 0 ? crop[3] : (int)im->h;
