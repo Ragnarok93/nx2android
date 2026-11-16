@@ -92,9 +92,13 @@ class Bundle(unittest.TestCase):
                 return Future(fn, args)
 
         entries = [(i, i % 6, spirv(i + 10, 100 + i), refl(i % 3, b'x' * i)) for i in range(24)]
+        path_entries = []
+        for key, stage, spv, reflection in entries:
+            module = self.d / f'{key:04x}.spv'; module.write_bytes(spv)
+            path_entries.append((key, stage, module, reflection))
         p = self.d / 'bounded.dmsv'
         with mock.patch.object(dmsv, 'zstd_mod', return_value=fake), mock.patch.object(dmsv.cf, 'ThreadPoolExecutor', BoundedExecutor):
-            ver, raw, stored = dmsv.write(str(p), entries, jobs=2)
+            ver, raw, stored = dmsv.write(str(p), path_entries, jobs=2)
             read_ver, got, _ = self.read(p)
         self.assertEqual(ver, 2)
         self.assertEqual(raw, sum(len(e[2]) for e in entries))
