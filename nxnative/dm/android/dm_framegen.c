@@ -26,9 +26,9 @@ static void settings_init(void) {
     int exp = -1;
     if (atomic_load(&g_on) != -1) return;
     const char *e;
-    if ((e = getenv("DM_LSFG_MULT"))) atomic_store(&g_mult, atoi(e));
-    if ((e = getenv("DM_LSFG_TARGET"))) atomic_store(&g_target, atoi(e));
-    if ((e = getenv("DM_LSFG_FLOW"))) atomic_store(&g_flow, atoi(e));
+    if ((e = getenv("DM_LSFG_MULT"))) { int v = atoi(e); atomic_store(&g_mult, v < 2 ? 2 : v > 4 ? 4 : v); }
+    if ((e = getenv("DM_LSFG_TARGET"))) { int v = atoi(e); atomic_store(&g_target, v < 0 ? 0 : v); }
+    if ((e = getenv("DM_LSFG_FLOW"))) { int v = atoi(e); atomic_store(&g_flow, v <= 0 ? 0 : v < 25 ? 25 : v > 100 ? 100 : v); }
     e = getenv("DM_LSFG");
     atomic_compare_exchange_strong(&g_on, &exp, e && atoi(e) ? 1 : 0);
 }
