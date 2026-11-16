@@ -96,6 +96,12 @@ int main(void) {
     assert(ov_menu_item(2, 1) == -1);
     driver_available = 1;
     assert(ov_menu_item(2, 1) == OVM_DRIVER);
+    float menu_rect[4]; ov_menu_rect(1000, 600, menu_rect);
+    assert(ov_menu_tab_count() == 3);
+    assert(ov_menu_tab_at(menu_rect[0] + menu_rect[2] * 0.83f, menu_rect) == 2);
+    driver_available = 0;
+    assert(ov_menu_tab_count() == 2);
+    assert(ov_menu_tab_at(menu_rect[0] + menu_rect[2] * 0.83f, menu_rect) == 1);
     const float screens[][2] = {{915, 412}, {1216, 760}, {2400, 1080}, {1080, 2400}};
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
         float W = screens[s][0], H = screens[s][1], step = H / OVE_GRID_ROWS, p[4];
