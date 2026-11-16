@@ -76,6 +76,17 @@ A controller whose A is the bottom button (Xbox labels, most Android devices' bu
 
 For Android's Unicode keyboard, port with `--native-keyboard`. It supports composed text, non-Latin scripts and emoji through the system IME, preserves initial text, and applies the guest's UTF-16 length limits. This option requires `javac` and an Android SDK with platform and build-tools (`ANDROID_HOME`). The default APK keeps the existing controller keyboard and does not require Java build tools. Combine `--external-display --native-keyboard` to opt into the native keyboard on an external-screen port; external display alone keeps the controller keyboard. The combined mode still needs runtime qualification over the full-screen phone gamepad.
 
+### Lossless Scaling frame generation
+
+Enable the optional frame-generation controls when porting a game with `--frame-generation` (or the desktop GUI checkbox). This builds the per-game Java Activity that supplies the document picker; the one-APK-per-game export remains unchanged.
+
+In the game's pause menu, open **Graphics**:
+- **Frame generation** turns LSFG on or off.
+- **Multiplier** cycles between 2x, 3x and 4x.
+- **Lossless.dll → Select** imports your own Windows `Lossless.dll` into the game's private app storage. Restart the game after importing it; the native host reads the DLL on startup.
+
+The DLL is proprietary and is never bundled or redistributed by this project. Frame generation also requires a Vulkan GPU/driver with the features LSFG needs; unsupported devices fall back to ordinary presentation and report the reason in `log.txt`. The default build includes the GPL-3.0-or-later LSFG engine, but the UI and DLL picker are opt-in per game.
+
 To include several Vulkan drivers in one game's APK, port with `--vulkan-driver-dir <folder>` (a folder of arm64 `.so` libraries). The APK includes the drivers and the pause menu's **Graphics → Vulkan driver** picker lets you choose a bundled driver or **System default**. The choice is saved in the game's `env.txt` and takes effect after restarting the game. This option needs `javac` and an Android SDK with platform and build-tools (`ANDROID_HOME`); `--vulkan-driver <file>` remains available to select one driver at port time.
 
 For the experimental external-screen controller, port from the command line with `--external-display`. The game moves to a connected display and the phone shows the gamepad. In the pause menu's **Game → Audio output**, choose the phone, a connected output, or the system default; the list updates as devices connect or disconnect. Bluetooth call-only routes are omitted; the system may not honor the requested device. This option requires `javac` and an Android SDK with a platform and build-tools (`ANDROID_HOME`). Android 12 or newer uses the saved native layout; Android 10–11 use the fallback controller. Support varies by device and game.
