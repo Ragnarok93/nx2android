@@ -85,7 +85,7 @@ In the game's pause menu, open **Graphics**:
 - **Multiplier** cycles between 2x, 3x and 4x.
 - **Lossless.dll → Select** imports your own Windows `Lossless.dll` into the game's private app storage. Restart the game after importing it; the native host reads the DLL on startup.
 
-The DLL is proprietary and is never bundled or redistributed by this project. Frame generation also requires a Vulkan GPU/driver with the features LSFG needs; unsupported devices fall back to ordinary presentation and report the reason in `log.txt`. The default build includes the GPL-3.0-or-later LSFG engine, but the UI and DLL picker are opt-in per game.
+The DLL is proprietary and is never bundled or redistributed by this project. Frame generation also requires a Vulkan GPU/driver with the features LSFG needs; unsupported devices fall back to ordinary presentation and report the reason in `log.txt`. The default build includes the GPL-3.0-or-later LSFG engine, but the UI and DLL picker are opt-in per game. Advanced tuning is available in the game's `env.txt`: `DM_LSFG_TARGET=0` selects automatic output rate (or set an FPS target), and `DM_LSFG_FLOW=0` selects automatic optical-flow quality (or set 25–100). `DM_LSFG_MIN_FPS` defaults to 30.
 
 To include several Vulkan drivers in one game's APK, port with `--vulkan-driver-dir <folder>` (a folder of arm64 `.so` libraries). The APK includes the drivers and the pause menu's **Graphics → Vulkan driver** picker lets you choose a bundled driver or **System default**. The choice is saved in the game's `env.txt` and takes effect after restarting the game. This option needs `javac` and an Android SDK with platform and build-tools (`ANDROID_HOME`); `--vulkan-driver <file>` remains available to select one driver at port time.
 
