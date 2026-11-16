@@ -58,6 +58,52 @@ class Bundle(unittest.TestCase):
         e = by[ENTRIES[2][0]]; self.assertEqual((e[6], e[3]), (0, len(ENTRIES[2][2])))   # one zstd does not shrink: stored as it is
         self.assertEqual([e[0] for e in ents], sorted(e[0] for e in ENTRIES))
 
+    @unittest.skipUnless(ZSTD, 'the normal zstd tests cover the installed compressor')
+    def test_compression_results_are_bounded_and_spooled(self):
+        # A deterministic zstd stand-in lets the test observe executor pressure
+        # without relying on machine RAM measurements or timing.
+        class FakeZstd:
+            class CompressionParameter:
+                compression_level = 1
+                checksum_flag = 2
+            def __init__(self): self.frames = {}
+            def compress(self, data, options=None):
+                frame = b'Z' + data[:max(1, len(data) // 2)]
+                self.frames[frame] = bytes(data)
+                return frame
+            def decompress(self, frame): return self.frames[bytes(frame)]
+
+        fake = FakeZstd()
+        state = {'pending': 0, 'peak': 0}
+        class Future:
+            def __init__(self, fn, args): self.fn, self.args, self.done = fn, args, False
+            def result(self):
+                try: return self.fn(*self.args)
+                finally:
+                    if not self.done:
+                        state['pending'] -= 1
+                        self.done = True
+        class BoundedExecutor:
+            def __init__(self, max_workers): self.max_workers = max_workers
+            def __enter__(self): return self
+            def __exit__(self, *exc): return False
+            def submit(self, fn, *args):
+                state['pending'] += 1
+                state['peak'] = max(state['peak'], state['pending'])
+                return Future(fn, args)
+
+        entries = [(i, i % 6, spirv(i + 10, 100 + i), refl(i % 3, b'x' * i)) for i in range(24)]
+        p = self.d / 'bounded.dmsv'
+        with mock.patch.object(dmsv, 'zstd_mod', return_value=fake), mock.patch.object(dmsv.cf, 'ThreadPoolExecutor', BoundedExecutor):
+            ver, raw, stored = dmsv.write(str(p), entries, jobs=2)
+        self.assertEqual(ver, 2)
+        self.assertEqual(raw, sum(len(e[2]) for e in entries))
+        self.assertLess(stored, raw)
+        self.assertLessEqual(state['peak'], 4)
+        self.assertEqual(state['peak'], 4)
+        ver, got, _ = self.read(p)
+        self.assertEqual((ver, got), (2, sorted(entries)))
+
     def test_without_zstd_version1(self):   # a Python without compression.zstd or backports.zstd: version 1, and a [RED] line says why
         p, out = self.d / 'nz.dmsv', io.StringIO()
         with mock.patch.object(dmsv, 'zstd_mod', return_value=None), contextlib.redirect_stdout(out): ver = dmsv.write(str(p), ENTRIES)[0]
