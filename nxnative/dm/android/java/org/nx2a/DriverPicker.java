@@ -5,6 +5,9 @@ import android.app.AlertDialog;
 import android.widget.Toast;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -24,15 +27,14 @@ final class DriverPicker {
 
         List<String> choices = new ArrayList<>();
         choices.add("System default");
-        File[] libs = libDir.listFiles();
-        if (libs != null) {
-            for (File lib : libs) {
-                String name = lib.getName();
-                if (name.endsWith(".so") && lib.isFile()
-                    && !name.equals("libdmhost.so") && !name.equals("libadrenotools.so")
-                    && !name.equals("libhook_impl.so") && !name.equals("libmain_hook.so")
-                    && !name.equals("libfile_redirect_hook.so") && !name.equals("libgsl_alloc_hook.so")) choices.add(name);
+        try (BufferedReader in = new BufferedReader(new InputStreamReader(activity.getAssets().open("vulkan-drivers.txt"), StandardCharsets.UTF_8))) {
+            String name;
+            while ((name = in.readLine()) != null) {
+                name = name.trim();
+                if (name.startsWith("lib") && name.endsWith(".so") && new File(libDir, name).isFile() && !choices.contains(name)) choices.add(name);
             }
+        } catch (IOException ignored) {
+            // APKs built with a single driver or the system driver have no picker manifest.
         }
         if (choices.size() == 1) {
             Toast.makeText(activity, "No custom Vulkan drivers are bundled with this game", Toast.LENGTH_LONG).show();
