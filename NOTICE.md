@@ -15,10 +15,11 @@ or (at your option) any later version. See [LICENSE](LICENSE).
 The repository's own maintained code, including the per-game APK porter, GUI,
 Android integration and native host, is distributed as part of this GPL-3.0-or-later
 combined work. The original MIT-licensed upstream code is sublicensed under GPL-3.0-or-later
-under the MIT license's express sublicense grant. Its original copyright and permission
-notice are preserved in [nxnative/LICENSE-MIT-ORIGINAL](nxnative/LICENSE-MIT-ORIGINAL)
-and reproduced below. The original notice remains applicable to copies of those
-upstream components distributed under the MIT grant.
+under the MIT license's express sublicense grant. The original native-engine MIT notice
+is preserved in [nxnative/LICENSE-MIT-ORIGINAL](nxnative/LICENSE-MIT-ORIGINAL), and the
+porter/GUI MIT notice is preserved in [LICENSE-MIT-PORTER](LICENSE-MIT-PORTER). The
+original notices remain applicable to copies of those upstream components distributed
+under their original MIT grants.
 
 ### Original MIT license notice
 
