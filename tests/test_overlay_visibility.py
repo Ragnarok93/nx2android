@@ -28,6 +28,7 @@ class OverlayVisibility(unittest.TestCase):
 #include <assert.h>
 #include <stdatomic.h>
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "front.h"
 #include "overlay_layout.h"
@@ -37,6 +38,13 @@ static _Atomic int g_set_rumble, g_set_fps, g_set_labels, g_menu_tab, g_sv_st;
 static int layout, saves;
 int dm_overlay_layout(void) { return layout; }
 int dm_menu_driver_available(void) { return 0; }
+int dm_menu_lossless_available(void) { return 0; }
+int dm_fg_enabled(void) { return 0; }
+void dm_fg_enable(int on) { (void)on; }
+void dm_fg_get(int *on, int *mult, int *target, int *flow) { if(on)*on=0; if(mult)*mult=2; if(target)*target=0; if(flow)*flow=75; }
+void dm_fg_set(int on, int mult, int target, int flow) { (void)on; (void)mult; (void)target; (void)flow; }
+static void env_set(const char *key, const char *value) { (void)key; (void)value; }
+#define LOG(...) do { } while (0)
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) {
     (void)l; (void)c; (void)x; (void)y; *s = 1; return 0;
@@ -53,6 +61,7 @@ static void sp_open(void) {}
 static void save_export(void) {}
 static void menu_audio(void) {}
 static void menu_driver(void) {}
+static void menu_lossless(void) {}
 static void menu_close(void) {}
 static void dm_overlay_redraw(void) {}
 ''' + visible + hidden + hit + menu + r'''
