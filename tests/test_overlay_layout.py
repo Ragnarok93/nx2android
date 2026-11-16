@@ -22,6 +22,7 @@ class OverlayLayout(unittest.TestCase):
 static int custom_faces, custom_a, custom_x, hidden_ctl = -1, audio_available, driver_available;
 int dm_menu_audio_available(void) { return audio_available; }
 int dm_menu_driver_available(void) { return driver_available; }
+int dm_menu_lossless_available(void) { return 1; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_off(int l, int c) { return l == 1 && c == hidden_ctl; }
 int dm_overlay_custom(int layout, int ctl, float *x, float *y, float *s) {
