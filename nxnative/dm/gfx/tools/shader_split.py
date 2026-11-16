@@ -1319,6 +1319,11 @@ def pool_map(fn, items, J, initargs, chunksize=1):
     pool needs, so the children are forked instead (forkpool.py): the same work, in parallel, without semaphores"""
     spill_flush()   # what this process wrote goes to disk before the children are forked (they inherit its handle)
     args = tuple(initargs) + (fn,)
+    if J <= 1:
+        # On low-memory Android devices, avoid forking a second copy of the large
+        # scan state just to run one worker. The same wrapper flushes each spill.
+        _pool_init(*args)
+        return [_pool_run(item) for item in items]
     try:
         with cf.ProcessPoolExecutor(J, initializer=_pool_init, initargs=args) as ex:
             return list(ex.map(_pool_run, items, chunksize=chunksize))
