@@ -524,7 +524,7 @@ static void menu_opacity(int v) {   // the slider: a new value is drawn at once 
     v = v < OV_OPACITY_MIN ? OV_OPACITY_MIN : v > OV_OPACITY_MAX ? OV_OPACITY_MAX : v;
     if (atomic_exchange(&g_set_opacity, v) != v) { dm_haptics_android_tap(); dm_overlay_redraw(); }
 }
-static void menu_tab(int t) { int n = dm_menu_driver_available() ? OVM_TABS : OVM_TABS - 1; t = (t % n + n) % n; if (atomic_exchange(&g_menu_tab, t) != t) dm_haptics_android_tap(); dm_overlay_redraw(); }
+static void menu_tab(int t) { int n = ov_menu_tab_count(); t = (t % n + n) % n; if (atomic_exchange(&g_menu_tab, t) != t) dm_haptics_android_tap(); dm_overlay_redraw(); }
 static void ed_open(void); static void sp_open(void); static void save_export(void);
 static void menu_audio(void) {
     if (!g_act || !g_act->vm || !g_act->clazz || !g_audio_menu_method) return;
