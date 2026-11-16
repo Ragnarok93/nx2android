@@ -3,13 +3,14 @@
 # the rewrite for DM_TARGET=android, the Vulkan shader bundle, the host built with the player's NDK, the APK, the data pack and the install.
 # Work files go where upstream's NSP script puts them, <game folder>/<title ID>_build/ (extract/, aoc/, shader/, logs/ are shared with an iOS build of the same folder),
 # with the Android ones in its android/ folder.
-import hashlib, importlib.util, json, os, re, shutil, subprocess, sys, traceback, zipfile
+import hashlib, importlib.util, json, os, re, shutil, sys, traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from porter import config, datapack, dumps, fpslocker, install, paths, profiles, product_cache, romfs_pack, toolchain
 from porter.adb import NO_ADB, Adb, AdbError
 from porter.paths import DM, NXNATIVE
+from porter.source_archive import build_source_archive
 from porter.upstream import BuildError, PROG, android_profile, game, nacp, nsp, profile_guess, say, trinity, uepak
 
 PY = sys.executable
@@ -20,37 +21,6 @@ UI_FONT = DM / 'third_party/fusion-pixel-font/fusion-pixel-12px-proportional-zh_
 def ui_font_assets():   # {name under assets/: file}: the overlay's font and its license files (Port.ui_font; porter host puts them in an APK ported before them)
     d = UI_FONT.parent
     return {'font/ui.bin': UI_FONT, **{f'font/{f.relative_to(d).as_posix()}': f for f in sorted(p for p in d.rglob('*.txt'))}}
-
-
-def corresponding_source_archive(dest):
-    """Package the exact repository source alongside GPL Android binaries."""
-    root = NXNATIVE.parent
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    git = shutil.which('git')
-    if git:
-        try:
-            subprocess.run([git, '-C', str(root), 'archive', '--format=zip', '--output', str(dest), 'HEAD'],
-                           check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-            return dest
-        except (OSError, subprocess.CalledProcessError):
-            pass
-    excluded = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
-                'node_modules', 'dist', 'build', 'out', '.idea', '.vscode'}
-    with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
-        for base in (NXNATIVE, root / 'porter', root / 'gui', root / 'tests'):
-            if not base.is_dir():
-                continue
-            for source in sorted(base.rglob('*')):
-                if not source.is_file() or any(part in excluded for part in source.relative_to(root).parts):
-                    continue
-                if source.suffix.lower() in {'.pyc', '.nsp', '.xci', '.nsz', '.xcz', '.apk', '.ipa', '.keystore', '.jks', '.pem', '.p12', '.pfx'}:
-                    continue
-                archive.write(source, source.relative_to(root).as_posix())
-        for name in ('LICENSE', 'NOTICE.md', 'LICENSE-MIT-PORTER', 'README.md', 'requirements.txt'):
-            source = root / name
-            if source.is_file():
-                archive.write(source, source.relative_to(root).as_posix())
-    return dest
 
 
 # The letters of the button-icon font (make_ext_font.py knocks them out of the icons): a bold system font of the machine that ports, never shipped in the repository
@@ -816,7 +786,7 @@ class Port:
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
         external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'frame_generation', False) or getattr(self.o, 'vulkan_driver_dir', None) else []
-        source_zip = corresponding_source_archive(self.so.parent / 'nx2android-source.zip')
+        source_zip = build_source_archive(NXNATIVE.parent, self.so.parent / 'nx2android-source.zip', self.g.id)
         source_assets = ['--asset', f'source/nx2android-source.zip={source_zip}']
         driver = self.o.vulkan_driver
         bundled = []; driver_assets = []
