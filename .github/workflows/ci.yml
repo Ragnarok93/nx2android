@@ -7,6 +7,13 @@ on:
   pull_request:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      title_id:
+        description: Existing Android game profile title ID
+        required: true
+        default: '0100000000010000'
+        type: string
 
 permissions:
   contents: read
@@ -29,6 +36,8 @@ jobs:
 
   android-build:
     runs-on: ubuntu-latest
+    env:
+      TITLE_ID: ${{ inputs.title_id || '0100000000010000' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -52,12 +61,48 @@ jobs:
       - name: Build Android native host for the existing per-game APK target
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
-          python nxnative/dm/android/build.py --game 0100000000010000 \
+          python nxnative/dm/android/build.py --game "$TITLE_ID" \
             --ndk "$ANDROID_NDK_HOME" --out "$RUNNER_TEMP/nx2a-host" \
             --lib --release --jobs 2
+      - name: Read the selected game's Android profile
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          title = os.environ["TITLE_ID"].upper()
+          profile = Path("nxnative/dm/games") / title / "android.tsv"
+          if not profile.is_file():
+              raise SystemExit(f"No Android profile found for {title}: {profile}")
+          fields = {}
+          for line in profile.read_text(encoding="utf-8").splitlines():
+              if not line or line.startswith("#") or "\\t" not in line:
+                  continue
+              key, value = line.split("\\t", 1)
+              fields[key] = value
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write("APP_NAME=" + fields.get("name", title) + "\\n")
+              env.write("APP_PACKAGE=" + fields.get("package", "org.nx2a.game" + title.lower()) + "\\n")
+              env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\\n")
+          PY
+      - name: Package the per-game installable APK
+        run: |
+          args=()
+          if [ "$APP_LANDSCAPE" = "true" ]; then args+=(--landscape); fi
+          python nxnative/dm/android/apk/mkapk.py \
+            "$RUNNER_TEMP/nx2a-host/libdmhost.so" "$RUNNER_TEMP/nx2a-game.apk" \
+            "$RUNNER_TEMP/nx2a-signing-key.json" --package "$APP_PACKAGE" --label "$APP_NAME" \
+            --lib dmhost --version-code 1 --version-name CI --release "${args[@]}"
+          {
+            echo "### Per-game APK smoke build"
+            echo "- Game: $APP_NAME ($TITLE_ID)"
+            echo "- Package: $APP_PACKAGE"
+            echo "- APK: `nx2a-game.apk`"
+            echo "- This APK contains the game-specific native host; the game data pack is separate and is not included because the runner has no game dump or keys."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
-          name: nx2android-android-smoke-build
+          name: nx2android-per-game-apk-smoke-build
           path: |
+            ${{ runner.temp }}/nx2a-game.apk
             ${{ runner.temp }}/nx2a-host/libdmhost.so
             ${{ runner.temp }}/nx2a-dex/classes.dex
