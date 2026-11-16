@@ -41,7 +41,8 @@ class Options:
     experimental: bool = False         # a game not ported to Android yet: a provisional profile from upstream's survey (or a copy of its iOS profile), status experimental
     package: str = ''                  # the app's package instead of the profile's (a test install beside another build of the game)
     fps60: bool = False                # 60 fps: the profile's own frame-rate cap, else the build's FPSLocker-Warehouse config (porter/fpslocker.py)
-    vulkan_driver: Path = None         # an arm64 Vulkan driver (Mesa's Turnip) packed in the APK and used instead of the system's (DM_VK_DRIVER, dm/android/gfx_vk_core.c)
+    vulkan_driver: Path = None         # one arm64 Vulkan driver packed in the APK and selected at port time
+    vulkan_driver_dir: Path = None      # multiple arm64 drivers; the game's Graphics menu selects one at run time
     shared_font: Path = None           # a TrueType font packed as the system's shared fonts, instead of the device's Roboto (DM_SHARED_FONT, dm/host/hle_sdk16.c)
     firmware: Path = None              # the player's system content files (.nca), for the profile's sysdata titles (extract_sysdata; DM_SYSDATA, dm/host/hle_fs.c)
     mt_replay: bool = False            # multithread replay: DM_VK_MT_REPLAY=1 in env.txt (dm/android/gfx_vk_dq.c), after the profile's env rows
@@ -210,9 +211,19 @@ class Port:
         o.folder = Path(o.folder).expanduser().resolve()
         if not o.folder.is_dir(): raise BuildError(f'not a folder: {o.folder}')
         version_code('v0', o.vercode_offset); alias_headroom_gb(o.alias_headroom)   # an offset or headroom out of range fails now, not after the shaders
+        if o.vulkan_driver and o.vulkan_driver_dir: raise BuildError('--vulkan-driver and --vulkan-driver-dir are mutually exclusive')
         if o.vulkan_driver:
             o.vulkan_driver = Path(o.vulkan_driver).expanduser().resolve()
             if not o.vulkan_driver.is_file() or o.vulkan_driver.suffix != '.so': raise BuildError(f'--vulkan-driver: not a .so library: {o.vulkan_driver}')
+        if o.vulkan_driver_dir:
+            o.vulkan_driver_dir = Path(o.vulkan_driver_dir).expanduser().resolve()
+            if not o.vulkan_driver_dir.is_dir(): raise BuildError(f'--vulkan-driver-dir: not a folder: {o.vulkan_driver_dir}')
+            drivers = sorted(p for p in o.vulkan_driver_dir.iterdir() if p.is_file() and p.suffix.lower() == '.so')
+            if not drivers: raise BuildError(f'--vulkan-driver-dir: no .so libraries in {o.vulkan_driver_dir}')
+            names = [driver_lib_name(p) for p in drivers]
+            reserved = set(ADRENOTOOLS_LIBS) | {'libdmhost.so'}
+            if len(names) != len(set(names)): raise BuildError(f'--vulkan-driver-dir: driver filenames collide after APK naming: {names}')
+            if reserved.intersection(names): raise BuildError(f'--vulkan-driver-dir: a driver uses a reserved APK library name: {reserved.intersection(names)}')
         if o.shared_font:
             o.shared_font = Path(o.shared_font).expanduser().resolve()
             if not o.shared_font.is_file() or o.shared_font.suffix.lower() != '.ttf': raise BuildError(f'--shared-font: not a .ttf font: {o.shared_font}')
@@ -755,7 +766,7 @@ class Port:
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--adrenotools'] if self.o.vulkan_driver else []), self.logs / 'android_host.log', env=self.env)
+                + (['--adrenotools'] if self.o.vulkan_driver or self.o.vulkan_driver_dir else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
         ph = out / 'gen' / self.g.id / 'game_profile.h'   # the profile the host was built from, for the data pack (porter host compares it with its checkout's)
@@ -770,16 +781,23 @@ class Port:
         icon = self.icon()
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
-        external = self.external_activity() if self.o.external_display or self.o.native_keyboard else []
+        external = self.external_activity() if self.o.external_display or self.o.native_keyboard or self.o.vulkan_driver_dir else []
         driver = self.o.vulkan_driver
-        if driver and driver.name != driver_lib_name(driver):   # packed under a lib*.so name (driver_lib_name), copied beside the host library
+        bundled = []
+        if self.o.vulkan_driver_dir:
+            for source in sorted(p for p in self.o.vulkan_driver_dir.iterdir() if p.is_file() and p.suffix.lower() == '.so'):
+                target = self.so.parent / driver_lib_name(source)
+                if target.exists(): target.unlink()
+                shutil.copyfile(source, target); bundled.append(target)
+            say(f'--vulkan-driver-dir: {len(bundled)} driver(s) bundled; choose one from the game\'s Graphics menu')
+        elif driver and driver.name != driver_lib_name(driver):
             driver = self.so.parent / driver_lib_name(driver); shutil.copyfile(self.o.vulkan_driver, driver)
             say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
                  '--version-code', str(code), '--version-name', self.display]
                 + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + ([] if self.o.debug else ['--release'])
                 + (['--game-mode-performance'] if getattr(self, 'gl', None) is False else [])   # only NVN implements the mode's pacing policy; GL keeps OEM interventions
-                + [a for f in ([driver] + [self.so.parent / n for n in ADRENOTOOLS_LIBS] if driver else []) for a in ('--extra-so', str(f))],
+                + [a for f in ((bundled or ([driver] if driver else [])) + ([self.so.parent / n for n in ADRENOTOOLS_LIBS] if (driver or bundled) else [])) for a in ('--extra-so', str(f))],
                 self.logs / 'android_apk.log', env=self.env)
         self.result['apk'] = str(self.apk_path)
         PROG.end(f'{self.apk_path.name}, {self.apk_path.stat().st_size / 2**20:.1f} MB')
