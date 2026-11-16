@@ -384,6 +384,7 @@ def main():
     if cap: print(f'{len(cap)} shaders captured at run time: {" ".join(f"{k} ({st})" for k, (st, _) in sorted(cap.items()))}', flush=True)
     keys = sorted(k for k in (a.keys.split(',') if a.keys else [*loc, *cap]) if k in loc or k in cap)
     packs = {}
+    source = mapped = offsets = rec = None
     w = tempfile.mkdtemp(prefix='shvk_', dir=os.environ.get('WORK'))
     jobs, c1s, stages = {}, {}, {}
     for k in keys:
@@ -481,6 +482,10 @@ def main():
     for source, mapped, _ in packs.values():
         mapped.close(); source.close()
     packs.clear()
+    # The last loop iteration can otherwise keep one full SPIR-V module and record alive.
+    product = rec = source = mapped = offsets = None
+    spv = res = binds = local = io = cl = hdr3 = st = None
+    r = None
     del jobs, c1s, stages, gs_var, rs, loc, cap, handle_remaps, batch_errors, failures, again, keys
     gc.collect()
     if a.zstd: print(f'compressing {len(entries)} shaders (zstd level {a.zstd}, {a.jobs} threads) ...', flush=True)
