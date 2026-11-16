@@ -22,6 +22,8 @@ jobs:
           cache: pip
       - name: Install test dependencies
         run: python -m pip install -r requirements.txt
+      - name: Compile Python entry points
+        run: python -m py_compile gui/app.py porter/cli.py porter/pipeline.py nxnative/dm/android/tools/dmsv.py nxnative/dm/android/tools/shader_vk.py
       - name: Run test suite
         run: python -m unittest discover tests
 
