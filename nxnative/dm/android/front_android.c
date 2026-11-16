@@ -51,7 +51,7 @@ static jmethodID g_audio_menu_method, g_driver_menu_method, g_lossless_menu_meth
 int dm_menu_audio_available(void) { return g_audio_menu_method != NULL; }
 int dm_menu_driver_available(void) { return g_driver_menu_method != NULL; }
 int dm_menu_lossless_available(void) { return g_lossless_menu_method != NULL; }
-int dm_fg_enabled(void); void dm_fg_enable(int on);
+int dm_fg_enabled(void); void dm_fg_enable(int on); void dm_fg_get(int *on, int *multiplier, int *target_rate, int *flow_pct); void dm_fg_set(int on, int multiplier, int target_rate, int flow_pct);
 static void env_set(const char *key, const char *value);
 AAssetManager *dm_front_assets(void) { return g_act ? g_act->assetManager : NULL; }   // the APK's assets (overlay_theme.c: the gamepad's theme)
 static pthread_mutex_t g_win_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -496,8 +496,9 @@ int dm_menu_state(void) {
     if (!atomic_load(&g_menu)) return -1;
     if (atomic_load(&g_edit)) return OVE_ST | atomic_load(&g_ed_st);
     if (atomic_load(&g_sp_on)) return OVS_ST | (atomic_load(&g_sp_hi) + 1) << 4 | (atomic_load(&g_sp_ver) & 255) << 20;
+    int fg_on = 0, fg_mult = 2; dm_fg_get(&fg_on, &fg_mult, NULL, NULL);
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
-           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 15) << 24 | pad_labels() << 28 | dm_fg_enabled() << 29;
+           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 15) << 24 | pad_labels() << 28 | fg_on << 29 | (fg_mult - 2) << 30;
 }
 int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_menu); }   // gfx_vk_present.c draws the counter (not while the menu holds the game)
 static void menu_open(int hi) {
@@ -577,6 +578,7 @@ static void menu_do(int item) {
     else if (item == OVM_AUDIO) { menu_audio(); }
     else if (item == OVM_DRIVER) { menu_driver(); }
     else if (item == OVM_FRAMEGEN) { int on = !dm_fg_enabled(); dm_fg_enable(on); env_set("DM_LSFG", on ? "1" : "0"); LOG("[framegen] %s", on ? "enabled" : "disabled"); }
+    else if (item == OVM_FG_MULT) { int on, mult, target, flow; dm_fg_get(&on, &mult, &target, &flow); mult = mult >= 4 ? 2 : mult + 1; dm_fg_set(on, mult, target, flow); char value[8]; snprintf(value, sizeof value, "%d", mult); env_set("DM_LSFG_MULT", value); }
     else if (item == OVM_LSFG_DLL) { menu_lossless(); }
     if (item >= 0 && item < OVM_N) dm_haptics_android_tap();
     if (item == OVM_RESUME) menu_close(); else dm_overlay_redraw();
