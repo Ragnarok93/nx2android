@@ -1198,7 +1198,7 @@ static void shake_start(void) {
     shake_sensor(!atomic_load(&g_bg));
 }
 static void *input_thread(void *a) {
-    (void)a; g_ilooper = ALooper_prepare(0);
+    (void)a; crash_thread_init(); g_ilooper = ALooper_prepare(0);
     shake_start();
     uint64_t prev = 0, latched = 0, sample = 0; int64_t since = 0;
     for (;;) {

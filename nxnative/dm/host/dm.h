@@ -122,6 +122,8 @@ void crash_watch_frame(void);
 void crash_watch_pregame_done(void);
 uint64_t crash_watch_progress_count(void);
 void crash_dump_now(const char *why);   // Dump state on demand (threads + graphics wait points), without exiting
+void crash_thread_init(void);   // Install the signal alternate stack for this thread before it can fault
+void crash_install(void);   // Install the host's signal handlers (Android and desktop entry points)   // Dump state on demand (threads + graphics wait points), without exiting
 // Diagnostic switches: read once from environment variables when main starts (getenv takes the libc global environment lock, and on a hot path it would make all guest threads queue up)
 extern uint64_t g_t0_ns;   // Host start time (now_ns), used for relative times in the log
 extern struct dm_flags { int thr, svc, fs, movie, dbg, imports, bootprof; } g_flag;

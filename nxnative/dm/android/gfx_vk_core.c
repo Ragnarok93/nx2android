@@ -1677,7 +1677,7 @@ static void pass_spike_flush(void) {
     g_nsf = 0; g_sf_tot = 0;
 }
 static void *completion_main(void *a) {
-    (void)a; pthread_setname_np(pthread_self(), "dm-vk-complete");
+    (void)a; pthread_setname_np(pthread_self(), "dm-vk-complete"); crash_thread_init();
     for (;;) {
         pthread_mutex_lock(&g_cmu);
         while (!g_ch) pthread_cond_wait(&g_ccv, &g_cmu);
