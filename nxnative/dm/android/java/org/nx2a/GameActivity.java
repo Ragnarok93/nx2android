@@ -20,6 +20,13 @@ public class GameActivity extends NativeActivity {
     /** The selected driver is read from env.txt on the next game launch. */
     public void openDriverMenu() { runOnUiThread(() -> DriverPicker.show(this)); }
 
+    /** Imports the player's own Lossless.dll; the native host loads it after the next restart. */
+    public void openLosslessPicker() { runOnUiThread(() -> LosslessPicker.show(this)); }
+
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        if (!LosslessPicker.onResult(this, request, result, data)) super.onActivityResult(request, result, data);
+    }
+
     @Override protected void onResume() { super.onResume(); keyboard.pause(false); }
     @Override protected void onPause() { keyboard.pause(true); super.onPause(); }
     @Override protected void onDestroy() { keyboard.pause(true); super.onDestroy(); }
