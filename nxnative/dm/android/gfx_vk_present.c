@@ -3,6 +3,7 @@
 // presented with FIFO (vsync) pacing. Headless (dmhost from adb shell): frames are counted, and DM_VK_SHOT=n1,n2,... writes those presented frames as PPM files to
 // DM_VK_SHOT_DIR (default DM_ROOT), which is how a run without a screen is checked.
 #include "gfx_vk.h"
+#include "dm_framegen.h"
 #include <android/native_window.h>
 #include <jni.h>
 #include <string.h>
