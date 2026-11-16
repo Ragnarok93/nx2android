@@ -247,6 +247,7 @@ static int fps_cap_step(void) {
     if (s < 0) { s = dm_fps_ceiling() == 30 ? 2 : 0; if (s) LOG("[perf] frame rate capped at 30 fps (the profile's fps_ceiling; porter's --fps60 lifts it)"); }
     return s;
 }
+int dm_perf_rate_fps(void) { return (int)(1000000000ll / STEPS[g_step]); }   // frame generation: the host's adaptive 60/40/30 fps ceiling
 uint64_t dm_present_period_adapt(uint64_t period) {
     g_game_period = period;
     if (!period) return period;
