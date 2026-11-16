@@ -22,6 +22,7 @@ class CubeViews(unittest.TestCase):
 #define VK_NO_PROTOTYPES
 #include <vulkan/vulkan_core.h>
 #include <stdint.h>
+#include <stdatomic.h>
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
