@@ -47,9 +47,12 @@ void front_screen_match(int fps) { (void)fps; }
 
 // ---------------- the app ----------------
 static ANativeActivity *g_act;
-static jmethodID g_audio_menu_method, g_driver_menu_method;
+static jmethodID g_audio_menu_method, g_driver_menu_method, g_lossless_menu_method;
 int dm_menu_audio_available(void) { return g_audio_menu_method != NULL; }
 int dm_menu_driver_available(void) { return g_driver_menu_method != NULL; }
+int dm_menu_lossless_available(void) { return g_lossless_menu_method != NULL; }
+int dm_fg_enabled(void); void dm_fg_enable(int on);
+static void env_set(const char *key, const char *value);
 AAssetManager *dm_front_assets(void) { return g_act ? g_act->assetManager : NULL; }   // the APK's assets (overlay_theme.c: the gamepad's theme)
 static pthread_mutex_t g_win_mu = PTHREAD_MUTEX_INITIALIZER;
 static ANativeWindow *g_win, *g_external_win;
@@ -494,7 +497,7 @@ int dm_menu_state(void) {
     if (atomic_load(&g_edit)) return OVE_ST | atomic_load(&g_ed_st);
     if (atomic_load(&g_sp_on)) return OVS_ST | (atomic_load(&g_sp_hi) + 1) << 4 | (atomic_load(&g_sp_ver) & 255) << 20;
     return atomic_load(&g_set_overlay) | atomic_load(&g_set_rumble) << 1 | (dm_opmode() != 0) << 2 | atomic_load(&g_set_fps) << 3 | (atomic_load(&g_menu_hi) + 1) << 4 |
-           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 15) << 24 | pad_labels() << 28;
+           atomic_load(&g_menu_tab) << 8 | atomic_load(&g_set_opacity) << 9 | atomic_load(&g_sv_st) << 20 | (atomic_load(&g_sv_n) & 15) << 24 | pad_labels() << 28 | dm_fg_enabled() << 29;
 }
 int dm_overlay_fps(void) { return atomic_load(&g_set_fps) && !atomic_load(&g_menu); }   // gfx_vk_present.c draws the counter (not while the menu holds the game)
 static void menu_open(int hi) {
@@ -548,6 +551,18 @@ static void menu_driver(void) {
     if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] Vulkan driver selection is unavailable"); }
     if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
 }
+
+static void menu_lossless(void) {
+    if (!g_act || !g_act->vm || !g_act->clazz || !g_lossless_menu_method) return;
+    JNIEnv *e = NULL; int attached = 0;
+    if ((*g_act->vm)->GetEnv(g_act->vm, (void **)&e, JNI_VERSION_1_6) != JNI_OK) {
+        if ((*g_act->vm)->AttachCurrentThread(g_act->vm, &e, NULL) != JNI_OK) return;
+        attached = 1;
+    }
+    (*e)->CallVoidMethod(e, g_act->clazz, g_lossless_menu_method);
+    if ((*e)->ExceptionCheck(e)) { (*e)->ExceptionClear(e); LOG("[menu] Lossless.dll selection is unavailable"); }
+    if (attached) (*g_act->vm)->DetachCurrentThread(g_act->vm);
+}
 static void menu_do(int item) {
     if (item == OVM_OVERLAY) { atomic_store(&g_set_overlay, !atomic_load(&g_set_overlay)); atomic_store(&g_overlay, 1); settings_save(); }
     else if (item == OVM_RUMBLE) { int on = !atomic_load(&g_set_rumble); atomic_store(&g_set_rumble, on); dm_haptics_android_set(on); settings_save(); }
@@ -561,6 +576,8 @@ static void menu_do(int item) {
     else if (item == OVM_IMPORT) { dm_haptics_android_tap(); sp_open(); return; }
     else if (item == OVM_AUDIO) { menu_audio(); }
     else if (item == OVM_DRIVER) { menu_driver(); }
+    else if (item == OVM_FRAMEGEN) { int on = !dm_fg_enabled(); dm_fg_enable(on); env_set("DM_LSFG", on ? "1" : "0"); LOG("[framegen] %s", on ? "enabled" : "disabled"); }
+    else if (item == OVM_LSFG_DLL) { menu_lossless(); }
     if (item >= 0 && item < OVM_N) dm_haptics_android_tap();
     if (item == OVM_RESUME) menu_close(); else dm_overlay_redraw();
 }
@@ -1226,6 +1243,27 @@ static void env_file(const char *path) {   // KEY=VALUE per line (# comments): s
     }
     fclose(f);
 }
+
+static void env_set(const char *key, const char *value) {
+    char path[600], temp[620], line[1024], prefix[128];
+    snprintf(path, sizeof path, "%s/env.txt", g_root); snprintf(temp, sizeof temp, "%s.new", path);
+    snprintf(prefix, sizeof prefix, "%s=", key);
+    FILE *in = fopen(path, "r"), *out = fopen(temp, "w");
+    if (!out) { if (in) fclose(in); LOG("[RED] cannot write %s", temp); return; }
+    int found = 0;
+    if (in) {
+        while (fgets(line, sizeof line, in)) {
+            if (!strncmp(line, prefix, strlen(prefix))) {
+                if (!found) fprintf(out, "%s=%s\\n", key, value);
+                found = 1;
+            } else fputs(line, out);
+        }
+        fclose(in);
+    }
+    if (!found) fprintf(out, "%s=%s\\n", key, value);
+    int ok = !ferror(out) && !fclose(out) && !rename(temp, path);
+    if (!ok) { unlink(temp); LOG("[RED] cannot update %s in %s", key, path); }
+}
 // ---- a RomFS outside the app's files folder (env.txt's DM_ROMFS, written by porter install --romfs-at: a game dump another app also reads, a folder on the SD card). The app
 // reads it only with All files access (the appop MANAGE_EXTERNAL_STORAGE, Android 11 on) or, on Android 10, READ_EXTERNAL_STORAGE in the legacy storage view: mkapk.py asks
 // for both and porter grants them over adb. Without it scoped storage gives the app none of the files another app made there, and the game would fail somewhere in its
@@ -1287,6 +1325,8 @@ __attribute__((visibility("default"))) void ANativeActivity_onCreate(ANativeActi
         g_audio_menu_method = (*env)->GetMethodID(env, activity_class, "openAudioMenu", "()V");
         if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
         g_driver_menu_method = (*env)->GetMethodID(env, activity_class, "openDriverMenu", "()V");
+        if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
+        g_lossless_menu_method = (*env)->GetMethodID(env, activity_class, "openLosslessPicker", "()V");
     }
     if ((*env)->ExceptionCheck(env)) (*env)->ExceptionClear(env);
     if (activity_class) (*env)->DeleteLocalRef(env, activity_class);
