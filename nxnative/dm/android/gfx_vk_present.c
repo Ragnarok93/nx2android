@@ -80,6 +80,7 @@ __attribute__((weak)) int dm_overlay_off(int layout, int ctl) { (void)layout; (v
 __attribute__((weak)) float dm_overlay_opacity(void) { return 0.6f; }
 __attribute__((weak)) int dm_overlay_layout(void) { return 0; }
 __attribute__((weak)) int dm_text_entry(char *title, int tcap, char *text, int xcap, int *sel, int *shift) { (void)title; (void)tcap; (void)text; (void)xcap; (void)sel; (void)shift; return 0; }
+// ---- the performance HUD's counters (perf_android.c reads its own frame metrics) ----
 static void pace_reset(void); static void ov_fb_drop(void);
 // Pre-rotation. A landscape window on a panel whose own orientation is portrait (the Retroid Pocket 5: 1080x1920, the window 1920x1080, currentTransform
 // ROTATE_90) left the turn to Android's compositor, and its display hardware does not rotate such a layer: SurfaceFlinger composited it on the GPU every
