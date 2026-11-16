@@ -92,6 +92,8 @@ jobs:
               env.write("APP_PACKAGE=" + package + "\n")
               env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\n")
           PY
+      - name: Create the corresponding source archive
+        run: git archive --format=zip --output "$RUNNER_TEMP/nx2android-source.zip" HEAD
       - name: Package the per-game installable APK
         run: |
           args=()
@@ -100,13 +102,16 @@ jobs:
             "$RUNNER_TEMP/nx2a-host/libdmhost.so" "$RUNNER_TEMP/nx2a-game.apk" \
             "$RUNNER_TEMP/nx2a-signing-key.json" --package "$APP_PACKAGE" --label "$APP_NAME" \
             --lib dmhost --dex "$RUNNER_TEMP/nx2a-dex/classes.dex" --activity org.nx2a.GameActivity \
-            --version-code 1 --version-name CI --release "${args[@]}"
+            --version-code 1 --version-name CI \
+            --asset "source/nx2android-source.zip=$RUNNER_TEMP/nx2android-source.zip" \
+            --release "${args[@]}"
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$RUNNER_TEMP/nx2a-game.apk"
           {
             echo "### Per-game APK smoke build"
             echo "- Game: $APP_NAME ($TITLE_ID)"
             echo "- Package: $APP_PACKAGE (the .ci suffix keeps this smoke build separate from an installed game)"
             echo "- APK: `nx2a-game.apk`"
+            echo "- Corresponding source: `assets/source/nx2android-source.zip` (also attached separately)"
             echo "- This APK contains the game-specific native host; the game data pack is separate and is not included because the runner has no game dump or keys."
           } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
@@ -116,3 +121,4 @@ jobs:
             ${{ runner.temp }}/nx2a-game.apk
             ${{ runner.temp }}/nx2a-host/libdmhost.so
             ${{ runner.temp }}/nx2a-dex/classes.dex
+            ${{ runner.temp }}/nx2android-source.zip
