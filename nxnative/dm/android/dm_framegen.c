@@ -43,6 +43,13 @@ void dm_fg_set(int on, int multiplier, int target_rate, int flow_pct) {
 
 int dm_fg_enabled(void) { settings_init(); return atomic_load(&g_on) > 0; }
 void dm_fg_enable(int on) { settings_init(); atomic_store(&g_on, on ? 1 : 0); setenv("DM_LSFG", on ? "1" : "0", 1); }
+void dm_fg_get(int *on, int *multiplier, int *target_rate, int *flow_pct) {
+    settings_init();
+    if (on) *on = atomic_load(&g_on) > 0;
+    if (multiplier) *multiplier = atomic_load(&g_mult);
+    if (target_rate) *target_rate = atomic_load(&g_target);
+    if (flow_pct) *flow_pct = atomic_load(&g_flow);
+}
 
 int dm_fg_status(char *buf, int n) {
     settings_init();
