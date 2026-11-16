@@ -86,7 +86,10 @@ jobs:
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
               env.write("TITLE_ID=" + title + "\n")
               env.write("APP_NAME=" + fields.get("name", title) + "\n")
-              env.write("APP_PACKAGE=" + fields.get("package", "org.nx2a.game" + title.lower()) + "\n")
+              package = fields.get("package", "org.nx2a.game" + title.lower())
+              if not package.endswith(".ci"):
+                  package += ".ci"
+              env.write("APP_PACKAGE=" + package + "\n")
               env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\n")
           PY
       - name: Package the per-game installable APK
@@ -102,7 +105,7 @@ jobs:
           {
             echo "### Per-game APK smoke build"
             echo "- Game: $APP_NAME ($TITLE_ID)"
-            echo "- Package: $APP_PACKAGE"
+            echo "- Package: $APP_PACKAGE (the .ci suffix keeps this smoke build separate from an installed game)"
             echo "- APK: `nx2a-game.apk`"
             echo "- This APK contains the game-specific native host; the game data pack is separate and is not included because the runner has no game dump or keys."
           } >> "$GITHUB_STEP_SUMMARY"
