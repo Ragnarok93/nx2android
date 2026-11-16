@@ -93,7 +93,7 @@ jobs:
               env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\n")
           PY
       - name: Create the corresponding source archive
-        run: git archive --format=zip --output "$RUNNER_TEMP/nx2android-source.zip" HEAD
+        run: python porter/source_archive.py --root . --title-id "$TITLE_ID" --out "$RUNNER_TEMP/nx2android-source.zip"
       - name: Package the per-game installable APK
         run: |
           args=()
