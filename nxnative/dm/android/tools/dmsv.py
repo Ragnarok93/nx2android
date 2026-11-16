@@ -31,6 +31,14 @@ def zstd_mod():   # compression.zstd from Python 3.14, its backport before (pip 
     return zstd
 
 
+def _spv_bytes(value):
+    """Read a SPIR-V module from bytes or a path, keeping path-backed entries disk-resident."""
+    if isinstance(value, (str, os.PathLike)):
+        with open(value, 'rb') as f:
+            return f.read()
+    return value
+
+
 def write(path, entries, level=LEVEL, jobs=None):
     """entries [(key, stage, spv, refl)] → a bundle at path.
 
@@ -60,7 +68,7 @@ def write(path, entries, level=LEVEL, jobs=None):
             spool.write(data)
             spool.write(refl)
             off += len(data) + len(refl)
-            raw_total += len(spv)
+            raw_total += original_size or len(data)
             stored_total += len(data)
 
         if z:
@@ -68,7 +76,7 @@ def write(path, entries, level=LEVEL, jobs=None):
             opt = {P.compression_level: level, P.checksum_flag: 1}
 
             def pack(entry):
-                spv = entry[2]
+                spv = _spv_bytes(entry[2])
                 compressed = z.compress(spv, options=opt)
                 return (compressed, len(spv)) if len(compressed) < len(spv) else (spv, 0)
 
@@ -93,7 +101,7 @@ def write(path, entries, level=LEVEL, jobs=None):
         else:
             with open(spool_path, 'wb') as spool:
                 for entry in entries:
-                    append(entry, (entry[2], 0), spool)
+                    append(entry, (_spv_bytes(entry[2]), 0), spool)
                 spool.flush()
                 os.fsync(spool.fileno())
 
@@ -112,7 +120,7 @@ def write(path, entries, level=LEVEL, jobs=None):
             if check.version != ver or len(check.entries) != len(entries):
                 raise ValueError('shader bundle header did not read back correctly; previous bundle retained')
             for expected, actual in zip(entries, check.entries):
-                if actual[:2] != expected[:2] or check.spv(actual) != expected[2] or check.refl(actual) != expected[3]:
+                if actual[:2] != expected[:2] or check.spv(actual) != _spv_bytes(expected[2]) or check.refl(actual) != expected[3]:
                     raise ValueError(f'shader {expected[0]:016x} did not read back correctly; previous bundle retained')
         try:
             mode = stat.S_IMODE(os.stat(path).st_mode)
