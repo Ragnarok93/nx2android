@@ -3,7 +3,7 @@
 # the rewrite for DM_TARGET=android, the Vulkan shader bundle, the host built with the player's NDK, the APK, the data pack and the install.
 # Work files go where upstream's NSP script puts them, <game folder>/<title ID>_build/ (extract/, aoc/, shader/, logs/ are shared with an iOS build of the same folder),
 # with the Android ones in its android/ folder.
-import hashlib, importlib.util, json, os, re, shutil, sys, traceback
+import hashlib, importlib.util, json, os, re, shutil, subprocess, sys, traceback, zipfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -20,6 +20,39 @@ UI_FONT = DM / 'third_party/fusion-pixel-font/fusion-pixel-12px-proportional-zh_
 def ui_font_assets():   # {name under assets/: file}: the overlay's font and its license files (Port.ui_font; porter host puts them in an APK ported before them)
     d = UI_FONT.parent
     return {'font/ui.bin': UI_FONT, **{f'font/{f.relative_to(d).as_posix()}': f for f in sorted(p for p in d.rglob('*.txt'))}}
+
+
+def corresponding_source_archive(dest):
+    """Package the exact repository source alongside GPL Android binaries."""
+    root = NXNATIVE.parent
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    git = shutil.which('git')
+    if git:
+        try:
+            subprocess.run([git, '-C', str(root), 'archive', '--format=zip', '--output', str(dest), 'HEAD'],
+                           check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            return dest
+        except (OSError, subprocess.CalledProcessError):
+            pass
+    excluded = {'.git', '.venv', 'venv', '__pycache__', '.pytest_cache', '.mypy_cache', '.ruff_cache',
+                'node_modules', 'dist', 'build', 'out', '.idea', '.vscode'}
+    with zipfile.ZipFile(dest, 'w', zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
+        for base in (NXNATIVE, root / 'porter', root / 'gui', root / 'tests'):
+            if not base.is_dir():
+                continue
+            for source in sorted(base.rglob('*')):
+                if not source.is_file() or any(part in excluded for part in source.relative_to(root).parts):
+                    continue
+                if source.suffix.lower() in {'.pyc', '.nsp', '.xci', '.nsz', '.xcz', '.apk', '.ipa', '.keystore', '.jks', '.pem', '.p12', '.pfx'}:
+                    continue
+                archive.write(source, source.relative_to(root).as_posix())
+        for name in ('LICENSE', 'NOTICE.md', 'README.md', 'requirements.txt'):
+            source = root / name
+            if source.is_file():
+                archive.write(source, source.relative_to(root).as_posix())
+    return dest
+
+
 # The letters of the button-icon font (make_ext_font.py knocks them out of the icons): a bold system font of the machine that ports, never shipped in the repository
 LETTER_FONTS = [f'{os.environ.get("WINDIR", "C:/Windows")}/Fonts/{f}' for f in ('ARLRDBD.TTF', 'arialbd.ttf')] + [
     '/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
@@ -783,6 +816,8 @@ class Port:
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
         external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'frame_generation', False) or getattr(self.o, 'vulkan_driver_dir', None) else []
+        source_zip = corresponding_source_archive(self.so.parent / 'nx2android-source.zip')
+        source_assets = ['--asset', f'source/nx2android-source.zip={source_zip}']
         driver = self.o.vulkan_driver
         bundled = []; driver_assets = []
         if getattr(self.o, 'vulkan_driver_dir', None):
@@ -799,7 +834,7 @@ class Port:
             say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
                  '--version-code', str(code), '--version-name', self.display]
-                + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + driver_assets + ([] if self.o.debug else ['--release'])
+                + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + driver_assets + source_assets + ([] if self.o.debug else ['--release'])
                 + (['--game-mode-performance'] if getattr(self, 'gl', None) is False else [])   # only NVN implements the mode's pacing policy; GL keeps OEM interventions
                 + [a for f in ((bundled or ([driver] if driver else [])) + ([self.so.parent / n for n in ADRENOTOOLS_LIBS] if (driver or bundled) else [])) for a in ('--extra-so', str(f))],
                 self.logs / 'android_apk.log', env=self.env)
