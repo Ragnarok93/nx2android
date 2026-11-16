@@ -114,7 +114,7 @@ class PortTab(QWidget):
         f.addRow('Vulkan driver', path_row(self.driver, self.pick_driver))
         f.addRow('Vulkan driver folder', path_row(self.driver_dir, self.pick_driver_dir))
         f.addRow('System font', path_row(self.shared_font, self.pick_shared_font))
-        f.addRow('', self.fps60); f.addRow('', self.touch); f.addRow('', self.mt_replay); f.addRow('', self.debug); f.addRow('', self.experimental)
+        f.addRow('', self.fps60); f.addRow('', self.touch); f.addRow('', self.frame_generation); f.addRow('', self.mt_replay); f.addRow('', self.debug); f.addRow('', self.experimental)
         v.addWidget(o)
 
         bar = QHBoxLayout()
@@ -225,7 +225,7 @@ class PortTab(QWidget):
         if self.headroom.value() >= 0: args += ['--alias-headroom', str(self.headroom.value())]
         if self.fps60.isChecked(): args.append('--fps60')
         if self.touch.isChecked(): args.append('--touch')
-        if self.mt_replay.isChecked(): args.append('--mt-replay')
+        if self.mt_replay.isChecked(): args.append('--mt-replay')\n        if self.frame_generation.isChecked(): args.append('--frame-generation')
         if self.driver.text().strip(): args += ['--vulkan-driver', self.driver.text().strip()]
         if self.driver_dir.text().strip(): args += ['--vulkan-driver-dir', self.driver_dir.text().strip()]
         if self.shared_font.text().strip(): args += ['--shared-font', self.shared_font.text().strip()]
