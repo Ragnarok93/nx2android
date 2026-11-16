@@ -1261,7 +1261,9 @@ static void env_set(const char *key, const char *value) {
         fclose(in);
     }
     if (!found) fprintf(out, "%s=%s\\n", key, value);
-    int ok = !ferror(out) && !fclose(out) && !rename(temp, path);
+    int write_error = ferror(out);
+    int close_error = fclose(out);
+    int ok = !write_error && !close_error && !rename(temp, path);
     if (!ok) { unlink(temp); LOG("[RED] cannot update %s in %s", key, path); }
 }
 // ---- a RomFS outside the app's files folder (env.txt's DM_ROMFS, written by porter install --romfs-at: a game dump another app also reads, a folder on the SD card). The app
