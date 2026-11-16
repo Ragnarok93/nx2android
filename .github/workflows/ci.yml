@@ -61,6 +61,7 @@ jobs:
       - name: Build Android native host for the existing per-game APK target
         run: |
           export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          export TITLE_ID="${TITLE_ID^^}"
           python nxnative/dm/android/build.py --game "$TITLE_ID" \
             --ndk "$ANDROID_NDK_HOME" --out "$RUNNER_TEMP/nx2a-host" \
             --lib --release --jobs 2
@@ -92,7 +93,8 @@ jobs:
           python nxnative/dm/android/apk/mkapk.py \
             "$RUNNER_TEMP/nx2a-host/libdmhost.so" "$RUNNER_TEMP/nx2a-game.apk" \
             "$RUNNER_TEMP/nx2a-signing-key.json" --package "$APP_PACKAGE" --label "$APP_NAME" \
-            --lib dmhost --version-code 1 --version-name CI --release "${args[@]}"
+            --lib dmhost --dex "$RUNNER_TEMP/nx2a-dex/classes.dex" --activity org.nx2a.GameActivity \
+            --version-code 1 --version-name CI --release "${args[@]}"
           {
             echo "### Per-game APK smoke build"
             echo "- Game: $APP_NAME ($TITLE_ID)"
