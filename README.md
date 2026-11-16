@@ -115,4 +115,4 @@ Nintendo's takedown notices so far have gone to whoever hosts a project (13 Swit
 
 ## License
 
-MIT, as nxnative (see `nxnative/LICENSE`). Third-party code keeps its own license.
+GPL-3.0-or-later for the combined program (see `LICENSE` and `NOTICE.md`). The original MIT notice is preserved in `nxnative/LICENSE-MIT-ORIGINAL`; third-party components retain their own notices. Per-game APKs include the corresponding repository source archive at `assets/source/nx2android-source.zip`. The player's proprietary `Lossless.dll` is never included.
