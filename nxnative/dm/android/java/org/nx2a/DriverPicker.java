@@ -28,7 +28,10 @@ final class DriverPicker {
         if (libs != null) {
             for (File lib : libs) {
                 String name = lib.getName();
-                if (name.startsWith("libvulkan") && name.endsWith(".so") && lib.isFile()) choices.add(name);
+                if (name.endsWith(".so") && lib.isFile()
+                    && !name.equals("libdmhost.so") && !name.equals("libadrenotools.so")
+                    && !name.equals("libhook_impl.so") && !name.equals("libmain_hook.so")
+                    && !name.equals("libfile_redirect_hook.so") && !name.equals("libgsl_alloc_hook.so")) choices.add(name);
             }
         }
         if (choices.size() == 1) {
