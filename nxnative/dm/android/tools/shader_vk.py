@@ -8,7 +8,7 @@
 #   control section, code area), translated beside the package's; a file whose content does not hash to its name, or whose key the package has, is left out
 # Bundle (read by the Vulkan backend, dm/android/gfx_vk_shader.c): dmsv.py has the format and writes it. Each shader's SPIR-V and its binary reflection (refl_bin, below);
 #   version 2, the SPIR-V of each module zstd-compressed (--zstd, default dmsv.LEVEL; 0 or a Python without zstd: version 1, uncompressed).
-import argparse, collections, concurrent.futures as cf, hashlib, json, os, re, struct, subprocess, sys, tempfile
+import argparse, collections, concurrent.futures as cf, gc, hashlib, json, mmap, os, re, struct, subprocess, sys, tempfile
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -19,7 +19,7 @@ from shader_stage import glslc_stage   # shared stage rules, without importing t
 
 ap = argparse.ArgumentParser()
 ap.add_argument('pkg'); ap.add_argument('out')
-ap.add_argument('--jobs', type=int, default=os.cpu_count() or 8)
+ap.add_argument('--jobs', type=int, default=int(os.environ.get('J', os.cpu_count() or 1)))
 ap.add_argument('--keys', default='')
 ap.add_argument('--dotnet', default=os.environ.get('DOTNET', 'dotnet'))
 ap.add_argument('--report', help='write the expected and omitted shader inventory as JSON')
@@ -47,8 +47,17 @@ SUBGROUP = int(GAME.get("android_subgroup_size", "128"))
 GATHER_BIAS = 8
 
 def records(d):
-    r = [m.start() for m in re.finditer(b'BTCDBTCD', d)]
-    return [d[x:(r[k + 1] if k + 1 < len(r) else len(d))] for k, x in enumerate(r)]
+    """Index package records without copying their payloads into Python heap memory."""
+    out, at = [], 0
+    while True:
+        at = d.find(b'BTCDBTCD', at)
+        if at < 0: return out
+        out.append(at); at += 1
+
+def record_at(mapped, offsets, index):
+    start = offsets[index]
+    end = offsets[index + 1] if index + 1 < len(offsets) else len(mapped)
+    return mapped[start:end]   # one shader record at a time; package pages remain file-backed
 
 def captured(d):
     """The run-time captures in folder d (--capture): {key: (stage, record in the package's form)}"""
@@ -381,8 +390,12 @@ def main():
         if k in cap: stages[k], rec = cap[k]
         else:
             name, idx = loc[k]
-            if name not in packs: packs[name] = records((Path(a.pkg) / name).read_bytes())
-            stages[k], rec = name[:2], packs[name][idx]
+            if name not in packs:
+                source = open(Path(a.pkg) / name, 'rb')
+                mapped = mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ)
+                packs[name] = (source, mapped, records(mapped))
+            source, mapped, offsets = packs[name]
+            stages[k], rec = name[:2], record_at(mapped, offsets, idx)
         jobs[k], c1s[k] = job_for(k, stages[k], rec, w)
     # A geometry shader's input primitive is the draw's (Maxwell's shader header doesn't say it; Ryujinx asks the GPU state): one translation for each kind, as the Mac
     # chain's _g0.._g4 (dmsh_build.py), triangles under the shader's own key and the others under gs_variant_key, chosen by the pipeline's topology (gfx_vk_shader.c
@@ -462,6 +475,15 @@ def main():
             failed.append([f'{gs_var[k] if k in gs_var else int(k, 16):016x}', reason])
             fails[reason] += 1
             print(f'[RED] {failed[-1][0]}: {reason}', flush=True)
+    # All shader package bytes, per-shader job JSON, control sections and child-process
+    # results are dead after the entries have been validated. Drop them before compression:
+    # this was the peak-RAM overlap on large games (e.g. 70k+ shader bundles).
+    for source, mapped, _ in packs.values():
+        mapped.close(); source.close()
+    packs.clear()
+    del jobs, c1s, stages, gs_var, rs, loc, cap, handle_remaps, batch_errors, failures, again, keys
+    del product, spv, res, binds, local, io, rec, cl, hdr3, st, code if 'code' in locals() else None
+    gc.collect()
     if a.zstd: print(f'compressing {len(entries)} shaders (zstd level {a.zstd}, {a.jobs} threads) ...', flush=True)
     ver, raw, stored = dmsv.write(a.out, entries, level=a.zstd, jobs=a.jobs)
     if a.report:
