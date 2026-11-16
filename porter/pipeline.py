@@ -781,11 +781,11 @@ class Port:
         icon = self.icon()
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
-        external = self.external_activity() if self.o.external_display or self.o.native_keyboard or self.o.vulkan_driver_dir else []
+        external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'vulkan_driver_dir', None) else []
         driver = self.o.vulkan_driver
         bundled = []
-        if self.o.vulkan_driver_dir:
-            for source in sorted(p for p in self.o.vulkan_driver_dir.iterdir() if p.is_file() and p.suffix.lower() == '.so'):
+        if getattr(self.o, 'vulkan_driver_dir', None):
+            for source in sorted(p for p in getattr(self.o, 'vulkan_driver_dir', None).iterdir() if p.is_file() and p.suffix.lower() == '.so'):
                 target = self.so.parent / driver_lib_name(source)
                 if target.exists(): target.unlink()
                 shutil.copyfile(source, target); bundled.append(target)
