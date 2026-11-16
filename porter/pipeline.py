@@ -46,7 +46,7 @@ def corresponding_source_archive(dest):
                 if source.suffix.lower() in {'.pyc', '.nsp', '.xci', '.nsz', '.xcz', '.apk', '.ipa', '.keystore', '.jks', '.pem', '.p12', '.pfx'}:
                     continue
                 archive.write(source, source.relative_to(root).as_posix())
-        for name in ('LICENSE', 'NOTICE.md', 'README.md', 'requirements.txt'):
+        for name in ('LICENSE', 'NOTICE.md', 'LICENSE-MIT-PORTER', 'README.md', 'requirements.txt'):
             source = root / name
             if source.is_file():
                 archive.write(source, source.relative_to(root).as_posix())
