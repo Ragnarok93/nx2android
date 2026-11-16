@@ -25,7 +25,7 @@ def include_path(name, title):
         return False
     if name.startswith(("docs/images/", "nxnative/docs/images/")):
         return False
-    if name.startswith("nxnative/dm/games/") and len(parts) > 3 and parts[3].upper() != title:
+    if name.startswith("nxnative/dm/games/") and len(parts) > 4 and parts[3].upper() != title:
         return False
     if Path(name).suffix.lower() in _SKIP_SUFFIXES:
         return False
