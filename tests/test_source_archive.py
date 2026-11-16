@@ -6,6 +6,8 @@ import zipfile
 
 from porter.source_archive import build_source_archive
 
+ROOT = Path(__file__).resolve().parents[1]
+
 
 class SourceArchive(unittest.TestCase):
     def test_archive_contains_native_host_and_license_sources(self):
