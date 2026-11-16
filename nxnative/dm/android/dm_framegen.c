@@ -41,6 +41,9 @@ void dm_fg_set(int on, int multiplier, int target_rate, int flow_pct) {
     VLOG("frame generation: %s, x%d, target %d fps, flow %d%%", on ? "on" : "off", atomic_load(&g_mult), atomic_load(&g_target), atomic_load(&g_flow));
 }
 
+int dm_fg_enabled(void) { settings_init(); return atomic_load(&g_on) > 0; }
+void dm_fg_enable(int on) { settings_init(); atomic_store(&g_on, on ? 1 : 0); setenv("DM_LSFG", on ? "1" : "0", 1); }
+
 int dm_fg_status(char *buf, int n) {
     settings_init();
     int st = atomic_load(&g_state);
