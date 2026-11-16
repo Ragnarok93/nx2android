@@ -44,7 +44,6 @@ void dm_fg_enable(int on) { (void)on; }
 void dm_fg_get(int *on, int *mult, int *target, int *flow) { if(on)*on=0; if(mult)*mult=2; if(target)*target=0; if(flow)*flow=75; }
 void dm_fg_set(int on, int mult, int target, int flow) { (void)on; (void)mult; (void)target; (void)flow; }
 static void env_set(const char *key, const char *value) { (void)key; (void)value; }
-#define LOG(...) do { } while (0)
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) {
     (void)l; (void)c; (void)x; (void)y; *s = 1; return 0;
