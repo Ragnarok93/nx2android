@@ -75,15 +75,15 @@ jobs:
               raise SystemExit(f"No Android profile found for {title}: {profile}")
           fields = {}
           for line in profile.read_text(encoding="utf-8").splitlines():
-              if not line or line.startswith("#") or "\\t" not in line:
+              if not line or line.startswith("#") or "\t" not in line:
                   continue
-              key, value = line.split("\\t", 1)
+              key, value = line.split("\t", 1)
               fields[key] = value
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
-              env.write("TITLE_ID=" + title + "\\n")
-              env.write("APP_NAME=" + fields.get("name", title) + "\\n")
-              env.write("APP_PACKAGE=" + fields.get("package", "org.nx2a.game" + title.lower()) + "\\n")
-              env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\\n")
+              env.write("TITLE_ID=" + title + "\n")
+              env.write("APP_NAME=" + fields.get("name", title) + "\n")
+              env.write("APP_PACKAGE=" + fields.get("package", "org.nx2a.game" + title.lower()) + "\n")
+              env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\n")
           PY
       - name: Package the per-game installable APK
         run: |
