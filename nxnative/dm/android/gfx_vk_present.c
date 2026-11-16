@@ -80,7 +80,6 @@ __attribute__((weak)) int dm_overlay_off(int layout, int ctl) { (void)layout; (v
 __attribute__((weak)) float dm_overlay_opacity(void) { return 0.6f; }
 __attribute__((weak)) int dm_overlay_layout(void) { return 0; }
 __attribute__((weak)) int dm_text_entry(char *title, int tcap, char *text, int xcap, int *sel, int *shift) { (void)title; (void)tcap; (void)text; (void)xcap; (void)sel; (void)shift; return 0; }
-// ---- the performance HUD's counters (perf_android.c reads its own frame metrics) ----
 static void pace_reset(void); static void ov_fb_drop(void);
 // Pre-rotation. A landscape window on a panel whose own orientation is portrait (the Retroid Pocket 5: 1080x1920, the window 1920x1080, currentTransform
 // ROTATE_90) left the turn to Android's compositor, and its display hardware does not rotate such a layer: SurfaceFlinger composited it on the GPU every
@@ -851,6 +850,7 @@ static int window_rate_changed(double fps, double *rate_fps, double *want_fps, u
     if (presents - *want_since >= 60) { *rate_fps = fps; return 1; }
     return 0;
 }
+// ---- the performance HUD's counters (perf_android.c reads its own frame metrics) ----
 static void pace_reset(void) { g_pace_target = g_pace_ideal = g_pace_anchor = g_refresh_ns = 0; }
 static uint64_t pace_snap(uint64_t t) {   // the first vsync at or after t on the grid through the anchor
     uint64_t r = g_refresh_ns, a = g_pace_anchor;
