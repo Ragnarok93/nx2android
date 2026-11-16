@@ -29,6 +29,8 @@ class CubeViews(unittest.TestCase):
 #include <pthread.h>
 #include <stdio.h>
 #include <stdarg.h>
+#include <stdatomic.h>
+static _Atomic uint64_t g_img_bytes;
 #include "nxnative/dm/gfx/nvn/nvn_obj.h"
 #include "nxnative/dm/gfx/nvn/nvn_hmap.h"
 #define VKLOG(...) ((void)0)
