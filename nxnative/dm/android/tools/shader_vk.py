@@ -482,7 +482,6 @@ def main():
         mapped.close(); source.close()
     packs.clear()
     del jobs, c1s, stages, gs_var, rs, loc, cap, handle_remaps, batch_errors, failures, again, keys
-    del product, spv, res, binds, local, io, rec, cl, hdr3, st, code if 'code' in locals() else None
     gc.collect()
     if a.zstd: print(f'compressing {len(entries)} shaders (zstd level {a.zstd}, {a.jobs} threads) ...', flush=True)
     ver, raw, stored = dmsv.write(a.out, entries, level=a.zstd, jobs=a.jobs)
