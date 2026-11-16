@@ -36,6 +36,7 @@ static _Atomic int g_cust[2][2][OV_N][4];
 static _Atomic int g_set_rumble, g_set_fps, g_set_labels, g_menu_tab, g_sv_st;
 static int layout, saves;
 int dm_overlay_layout(void) { return layout; }
+int dm_menu_driver_available(void) { return 0; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_custom(int l, int c, float *x, float *y, float *s) {
     (void)l; (void)c; (void)x; (void)y; *s = 1; return 0;
@@ -51,6 +52,7 @@ static void ed_open(void) {}
 static void sp_open(void) {}
 static void save_export(void) {}
 static void menu_audio(void) {}
+static void menu_driver(void) {}
 static void menu_close(void) {}
 static void dm_overlay_redraw(void) {}
 ''' + visible + hidden + hit + menu + r'''
