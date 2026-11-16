@@ -174,6 +174,10 @@ class GameMode(unittest.TestCase):
             self.assertEqual(set(extras), {'libvulkan.purple.so', 'libvulkan_freedreno.so', *pipeline.ADRENOTOOLS_LIBS})
             self.assertTrue((t / 'libvulkan.purple.so').is_file())
             self.assertTrue((t / 'libvulkan_freedreno.so').is_file())
+            asset = args[args.index('--asset') + 1]
+            self.assertTrue(asset.startswith('vulkan-drivers.txt='))
+            self.assertEqual(Path(asset.split('=', 1)[1]).read_text().splitlines(),
+                             ['libvulkan.purple.so', 'libvulkan_freedreno.so'])
 
     def test_native_policy_and_explicit_overrides(self):
         source = (ANDROID/'perf_android.c').read_text(encoding='utf-8')
