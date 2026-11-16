@@ -30,6 +30,7 @@ class OverlayVisibility(unittest.TestCase):
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#define LOG(...) ((void)0)
 #include "front.h"
 #include "overlay_layout.h"
 static _Atomic int g_set_overlay, g_overlay, g_pads, g_edit;
@@ -91,7 +92,6 @@ static struct { int sel; } g_tx;
 static int g_tx_mu;
 #define pthread_mutex_lock(m) ((void)(m))
 #define pthread_mutex_unlock(m) ((void)(m))
-#define LOG(...) ((void)0)
 #define AInputEvent_getSource(e) ((e)->source)
 #define AInputEvent_getType(e) ((e)->type)
 #define AInputEvent_getDeviceId(e) ((e)->device)
