@@ -12,6 +12,7 @@ class SourceArchive(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="nx2a_source_") as tmp:
             archive = build_source_archive(ROOT, Path(tmp) / "source.zip", "0100000000010000")
             self.assertTrue(archive.is_file())
+            self.assertLess(archive.stat().st_size, 30 * 1024 * 1024, 'source archive should not include unrelated game profiles or documentation artwork')
             with zipfile.ZipFile(archive) as z:
                 names = set(z.namelist())
             for name in (
