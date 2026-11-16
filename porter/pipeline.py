@@ -218,7 +218,7 @@ class Port:
         if o.vulkan_driver_dir:
             o.vulkan_driver_dir = Path(o.vulkan_driver_dir).expanduser().resolve()
             if not o.vulkan_driver_dir.is_dir(): raise BuildError(f'--vulkan-driver-dir: not a folder: {o.vulkan_driver_dir}')
-            drivers = sorted(p for p in o.vulkan_driver_dir.iterdir() if p.is_file() and p.suffix.lower() == '.so')
+            drivers = sorted(p for p in o.vulkan_driver_dir.iterdir() if p.is_file() and p.suffix == '.so')
             if not drivers: raise BuildError(f'--vulkan-driver-dir: no .so libraries in {o.vulkan_driver_dir}')
             names = [driver_lib_name(p) for p in drivers]
             reserved = set(ADRENOTOOLS_LIBS) | {'libdmhost.so'}
@@ -785,7 +785,7 @@ class Port:
         driver = self.o.vulkan_driver
         bundled = []; driver_assets = []
         if getattr(self.o, 'vulkan_driver_dir', None):
-            for source in sorted(p for p in getattr(self.o, 'vulkan_driver_dir', None).iterdir() if p.is_file() and p.suffix.lower() == '.so'):
+            for source in sorted(p for p in getattr(self.o, 'vulkan_driver_dir', None).iterdir() if p.is_file() and p.suffix == '.so'):
                 target = self.so.parent / driver_lib_name(source)
                 if target.exists(): target.unlink()
                 shutil.copyfile(source, target); bundled.append(target)
