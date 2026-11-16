@@ -3,6 +3,7 @@ import ast
 import collections
 import concurrent.futures as cf
 import contextlib
+import gc
 import hashlib
 import importlib
 import io
@@ -95,7 +96,7 @@ class ExportChecks(unittest.TestCase):
         try: products = importlib.import_module('shader_products')
         except ModuleNotFoundError: products = None
         env = dict(collections=collections, cf=cf, os=os, json=json, struct=struct,
-                   tempfile=tempfile, subprocess=subprocess, dmsv=dmsv, Path=Path, re=re, mmap=mmap,
+                   tempfile=tempfile, subprocess=subprocess, dmsv=dmsv, Path=Path, re=re, mmap=mmap, gc=gc,
                    shader_products=products, GAME=game, MAP=str(table), XLATE_DLL='translator.dll',
                    a=SimpleNamespace(pkg=str(self.root/'pkg'), out=str(self.out), capture=None, keys='',
                                      jobs=self.jobs, dotnet='dotnet', zstd=0, report=str(self.report)),
