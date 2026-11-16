@@ -38,10 +38,23 @@ final class DriverPicker {
             Toast.makeText(activity, "No custom Vulkan drivers are bundled with this game", Toast.LENGTH_LONG).show();
             return;
         }
+        int checked = 0;
+        try {
+            for (String line : java.nio.file.Files.readAllLines(env.toPath(), StandardCharsets.UTF_8)) {
+                if (line.startsWith("DM_VK_DRIVER=")) {
+                    int selected = choices.indexOf(line.substring("DM_VK_DRIVER=".length()).trim());
+                    if (selected >= 0) checked = selected;
+                }
+            }
+        } catch (Exception error) {
+            Toast.makeText(activity, "Could not read driver setting: " + error.getMessage(), Toast.LENGTH_LONG).show();
+            return;
+        }
 
         new AlertDialog.Builder(activity)
             .setTitle("Vulkan driver")
-            .setItems(choices.toArray(new String[0]), (dialog, which) -> {
+            .setSingleChoiceItems(choices.toArray(new String[0]), checked, (dialog, which) -> {
+                dialog.dismiss();
                 String selected = which == 0 ? "" : choices.get(which);
                 try {
                     List<String> lines = new ArrayList<>();
