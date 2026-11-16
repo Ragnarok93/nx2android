@@ -167,6 +167,7 @@ static const char *const OVM_TAB_NAMES[OVM_TABS] = {"Gamepad", "Game", "Graphics
 #define OVM_ROWS (OVM_PER_TAB + 2)   // the tabs, a tab's rows (as many for every tab: the panel keeps its size), Resume
 int dm_menu_audio_available(void);
 int dm_menu_driver_available(void);
+static inline int ov_menu_tab_count(void) { return dm_menu_driver_available() ? OVM_TABS : OVM_TABS - 1; }
 static inline int ov_menu_item(int tab, int row) {
     int item = row == 0 ? OVM_TAB : row == OVM_ROWS - 1 ? OVM_RESUME : row > 0 && row < OVM_ROWS - 1 ? OVM_TAB_ITEMS[tab % OVM_TABS][row - 1] : -1;
     if (item == OVM_AUDIO && !dm_menu_audio_available()) return -1;
@@ -200,7 +201,7 @@ static inline int ov_menu_row_at(float x, float y, float W, float H) {   // the 
     float q[4]; ov_menu_rowrect(r, 0, q); int i = (int)floorf((y - q[1]) / q[3]);
     return i >= 0 && i < OVM_ROWS ? i : -1;
 }
-static inline int ov_menu_tab_at(float x, const float p[4]) { int n = dm_menu_driver_available() ? OVM_TABS : OVM_TABS - 1; float r[4]; ov_menu_rowrect(p, 0, r); int t = (int)((x - r[0]) / (r[2] / n)); return t < 0 ? 0 : t >= n ? n - 1 : t; }
+static inline int ov_menu_tab_at(float x, const float p[4]) { int n = ov_menu_tab_count(); float r[4]; ov_menu_rowrect(p, 0, r); int t = (int)((x - r[0]) / (r[2] / n)); return t < 0 ? 0 : t >= n ? n - 1 : t; }
 // the Opacity slider's track in its row (x, y of its left end's centre line, width): the right part of the row, room for the value after it
 static inline void ov_menu_track(const float p[4], int row, float t[3]) { float r[4]; ov_menu_rowrect(p, row, r); t[0] = r[0] + r[2] * 0.40f; t[1] = r[1] + r[3] / 2; t[2] = r[2] * 0.44f; }
 static inline int ov_menu_track_value(float x, const float p[4], int row) {   // the opacity a finger at x sets, whole 5 percents
