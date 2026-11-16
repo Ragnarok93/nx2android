@@ -408,7 +408,7 @@ static void ov_menu_panel(const ov_canvas *cv, int st) {
         if (it == OVM_RESUME) { cv_rrect(cv, r[0], r[1], r[0] + rw, r[1] + 1, 0.5f, C_LINE); cv_text(cv, r[0] + (rw - cv_text_w("Resume", is)) / 2, cy, "Resume", is, C_ACCENT); continue; }
         const char *label = OVM_LABELS[it];
         if (it == OVM_FRAMEGEN) {
-            int dm_fg_status(char *buf, int n); int fg = dm_fg_status(NULL, 0);
+            int fg = dm_fg_status(NULL, 0);
             if (fg == -1) label = "Frame gen unavailable";
             else if (fg == 1) label = "Frame gen active";
             else if (fg == 2) label = "Frame gen waiting";
