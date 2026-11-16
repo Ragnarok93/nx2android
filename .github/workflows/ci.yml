@@ -98,6 +98,7 @@ jobs:
             "$RUNNER_TEMP/nx2a-signing-key.json" --package "$APP_PACKAGE" --label "$APP_NAME" \
             --lib dmhost --dex "$RUNNER_TEMP/nx2a-dex/classes.dex" --activity org.nx2a.GameActivity \
             --version-code 1 --version-name CI --release "${args[@]}"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$RUNNER_TEMP/nx2a-game.apk"
           {
             echo "### Per-game APK smoke build"
             echo "- Game: $APP_NAME ($TITLE_ID)"
