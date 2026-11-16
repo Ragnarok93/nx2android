@@ -150,6 +150,35 @@ class GameMode(unittest.TestCase):
                 self.assertEqual(len(calls), 1)
                 self.assertEqual('--game-mode-performance' in calls[0], gl is False)
 
+    def test_driver_directory_is_bundled_into_per_game_apk(self):
+        sys.path.insert(0, str(ROOT))
+        from porter import pipeline
+        with tempfile.TemporaryDirectory(prefix='nx2a_driver_bundle_') as temp:
+            t = Path(temp); drivers = t / 'drivers'; drivers.mkdir()
+            (drivers / 'vulkan.purple.so').write_bytes(b'purple')
+            (drivers / 'libvulkan_freedreno.so').write_bytes(b'freedreno')
+            p = object.__new__(pipeline.Port)
+            p.g = SimpleNamespace(); p.app_name = 'Synthetic'; p.pkg_ver = 'v0'; p.package = 'org.nx2a.probe'; p.display = '1.0'
+            p.o = SimpleNamespace(out=t, vercode_offset=0, external_display=False, native_keyboard=False,
+                                  vulkan_driver=None, vulkan_driver_dir=drivers, debug=True)
+            p.ap = SimpleNamespace(landscape=False); p.so = t/'host.so'; p.logs = t; p.env = {}; p.result = {}
+            p.icon = p.theme = p.ui_font = lambda: []
+            p.external_activity = lambda: ['--dex', t/'classes.dex', '--activity', 'org.nx2a.GameActivity']
+            calls = []
+            def run(args, *a, **kw): calls.append(args); p.apk_path.write_bytes(b'unsigned placeholder')
+            with patch.object(pipeline, 'app_stem', return_value='Synthetic'), patch.object(pipeline.nsp, 'run', side_effect=run), patch.object(pipeline.paths, 'signing_key', return_value=t/'unused-key'), patch.object(pipeline, 'PROG'):
+                p.apk()
+            args = calls[0]
+            self.assertIn('--activity', args); self.assertIn('org.nx2a.GameActivity', args)
+            extras = [Path(args[i + 1]).name for i, value in enumerate(args[:-1]) if value == '--extra-so']
+            self.assertEqual(set(extras), {'libvulkan.purple.so', 'libvulkan_freedreno.so', *pipeline.ADRENOTOOLS_LIBS})
+            self.assertTrue((t / 'libvulkan.purple.so').is_file())
+            self.assertTrue((t / 'libvulkan_freedreno.so').is_file())
+            asset = args[args.index('--asset') + 1]
+            self.assertTrue(asset.startswith('vulkan-drivers.txt='))
+            self.assertEqual(Path(asset.split('=', 1)[1]).read_text().splitlines(),
+                             ['libvulkan_freedreno.so', 'libvulkan.purple.so'])
+
     def test_native_policy_and_explicit_overrides(self):
         source = (ANDROID/'perf_android.c').read_text(encoding='utf-8')
         self.assertTrue('void dm_perf_game_mode(' in source, 'missing Game Mode policy')

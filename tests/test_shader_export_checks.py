@@ -3,10 +3,12 @@ import ast
 import collections
 import concurrent.futures as cf
 import contextlib
+import gc
 import hashlib
 import importlib
 import io
 import json
+import mmap
 import os
 import re
 from pathlib import Path
@@ -38,6 +40,23 @@ def module(stage):
          5 << 16 | 54, 1, 4, 0, 2, 2 << 16 | 248, 5,
          1 << 16 | 253, 1 << 16 | 56]
     return struct.pack(f'<{len(w)}I', *w)
+
+
+class PackageRecordIndex(unittest.TestCase):
+    def test_mmap_index_keeps_package_payloads_file_backed(self):
+        source = TOOLS / 'shader_vk.py'; tree = ast.parse(source.read_text())
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ('records', 'record_at')]
+        env = {'mmap': mmap}
+        exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec'), env)
+        with tempfile.TemporaryDirectory(prefix='nx2a_shader_mmap_') as tmp:
+            path = Path(tmp) / 'shader.bin'
+            first, second = b'BTCDBTCD' + b'A' * 128, b'BTCDBTCD' + b'B' * 256
+            path.write_bytes(first + second)
+            with open(path, 'rb') as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mapped:
+                offsets = env['records'](mapped)
+                self.assertEqual(offsets, [0, len(first)])
+                self.assertEqual(env['record_at'](mapped, offsets, 0), first)
+                self.assertEqual(env['record_at'](mapped, offsets, 1), second)
 
 
 class ExportChecks(unittest.TestCase):
@@ -72,24 +91,24 @@ class ExportChecks(unittest.TestCase):
         table = self.root / 'shader_map.tsv'
         table.write_text(f'{self.stage}_test.bin\t0\t0\t0000000000000001\t0\n' +
                          (f'{self.stage}_test.bin\t0\t0\t0000000000000002\t0\n' if self.second_shader else ''))
-        (self.root / 'pkg' / f'{self.stage}_test.bin').write_bytes(b'fixture')
+        (self.root / 'pkg' / f'{self.stage}_test.bin').write_bytes(b'BTCDBTCDfixture')
         game = SimpleNamespace(table=lambda name: self.root / name)
         try: products = importlib.import_module('shader_products')
         except ModuleNotFoundError: products = None
         env = dict(collections=collections, cf=cf, os=os, json=json, struct=struct,
-                   tempfile=tempfile, subprocess=subprocess, dmsv=dmsv, Path=Path, re=re,
+                   tempfile=tempfile, subprocess=subprocess, dmsv=dmsv, Path=Path, re=re, mmap=mmap, gc=gc,
                    shader_products=products, GAME=game, MAP=str(table), XLATE_DLL='translator.dll',
                    a=SimpleNamespace(pkg=str(self.root/'pkg'), out=str(self.out), capture=None, keys='',
                                      jobs=self.jobs, dotnet='dotnet', zstd=0, report=str(self.report)),
                    STAGES={'vs': 0, 'cs': 5}, kinds_all=collections.Counter(),
-                   captured=lambda _: {}, records=lambda _: [b'fixture'],
+                   captured=lambda _: {},
                    job_for=lambda key, stage, rec, w: ({'key': key, 'attr': {}}, b''),
                    int_inputs=lambda _: {'0': 'uint'},
                    spirv_bindings=lambda _: (self.bindings, [1, 1, 1], {1: [0, 0, 0], 3: [0, 0, 0]}),
                    refl_bin=lambda cl,c1,hdr: struct.pack('<5I', 0, 0, *hdr),
                    classify=lambda *args: None)
         source = TOOLS / 'shader_vk.py'; tree = ast.parse(source.read_text())
-        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == 'main']
+        nodes = [n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name in ('records', 'record_at', 'main')]
         exec(compile(ast.Module(body=nodes, type_ignores=[]), str(source), 'exec'), env)
         with mock.patch.dict(os.environ, {'WORK': str(self.root)}), mock.patch.object(subprocess, 'run', side_effect=self.translate), contextlib.redirect_stdout(self.log):
             env['main']()

@@ -19,8 +19,10 @@ class OverlayLayout(unittest.TestCase):
         harness = r'''
 #include <assert.h>
 #include "overlay_layout.h"
-static int custom_faces, custom_a, custom_x, hidden_ctl = -1, audio_available;
+static int custom_faces, custom_a, custom_x, hidden_ctl = -1, audio_available, driver_available, lossless_available;
 int dm_menu_audio_available(void) { return audio_available; }
+int dm_menu_driver_available(void) { return driver_available; }
+int dm_menu_lossless_available(void) { return lossless_available; }
 float dm_overlay_scale(void) { return 1; }
 int dm_overlay_off(int l, int c) { return l == 1 && c == hidden_ctl; }
 int dm_overlay_custom(int layout, int ctl, float *x, float *y, float *s) {
@@ -92,6 +94,21 @@ int main(void) {
     assert(ov_menu_item(1, OVM_ROWS - 1) == OVM_RESUME);
     audio_available = 1;
     assert(ov_menu_item(1, OVM_ROWS - 2) == OVM_AUDIO);
+    assert(ov_menu_item(2, 1) == -1);
+    driver_available = 1;
+    assert(ov_menu_item(2, 1) == OVM_DRIVER);
+    assert(ov_menu_item(2, 2) == OVM_FRAMEGEN);
+    assert(ov_menu_item(2, 3) == OVM_FG_MULT);
+    assert(ov_menu_item(2, 4) == -1);
+    lossless_available = 1;
+    assert(ov_menu_item(2, 4) == OVM_LSFG_DLL);
+    lossless_available = 0;
+    float menu_rect[4]; ov_menu_rect(1000, 600, menu_rect);
+    assert(ov_menu_tab_count() == 3);
+    assert(ov_menu_tab_at(menu_rect[0] + menu_rect[2] * 0.83f, menu_rect) == 2);
+    driver_available = 0;
+    assert(ov_menu_tab_count() == 2);
+    assert(ov_menu_tab_at(menu_rect[0] + menu_rect[2] * 0.83f, menu_rect) == 1);
     const float screens[][2] = {{915, 412}, {1216, 760}, {2400, 1080}, {1080, 2400}};
     for (unsigned s = 0; s < sizeof screens / sizeof screens[0]; s++) {
         float W = screens[s][0], H = screens[s][1], step = H / OVE_GRID_ROWS, p[4];

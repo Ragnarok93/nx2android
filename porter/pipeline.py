@@ -7,9 +7,10 @@ import hashlib, importlib.util, json, os, re, shutil, sys, traceback
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from porter import config, datapack, dumps, fpslocker, install, paths, profiles, product_cache, romfs_pack, toolchain
+from porter import config, datapack, dumps, fpslocker, install, paths, profiles, product_cache, resources, romfs_pack, toolchain
 from porter.adb import NO_ADB, Adb, AdbError
 from porter.paths import DM, NXNATIVE
+from porter.source_archive import build_source_archive
 from porter.upstream import BuildError, PROG, android_profile, game, nacp, nsp, profile_guess, say, trinity, uepak
 
 PY = sys.executable
@@ -20,6 +21,8 @@ UI_FONT = DM / 'third_party/fusion-pixel-font/fusion-pixel-12px-proportional-zh_
 def ui_font_assets():   # {name under assets/: file}: the overlay's font and its license files (Port.ui_font; porter host puts them in an APK ported before them)
     d = UI_FONT.parent
     return {'font/ui.bin': UI_FONT, **{f'font/{f.relative_to(d).as_posix()}': f for f in sorted(p for p in d.rglob('*.txt'))}}
+
+
 # The letters of the button-icon font (make_ext_font.py knocks them out of the icons): a bold system font of the machine that ports, never shipped in the repository
 LETTER_FONTS = [f'{os.environ.get("WINDIR", "C:/Windows")}/Fonts/{f}' for f in ('ARLRDBD.TTF', 'arialbd.ttf')] + [
     '/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf', '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/TTF/DejaVuSans-Bold.ttf',
@@ -41,18 +44,20 @@ class Options:
     experimental: bool = False         # a game not ported to Android yet: a provisional profile from upstream's survey (or a copy of its iOS profile), status experimental
     package: str = ''                  # the app's package instead of the profile's (a test install beside another build of the game)
     fps60: bool = False                # 60 fps: the profile's own frame-rate cap, else the build's FPSLocker-Warehouse config (porter/fpslocker.py)
-    vulkan_driver: Path = None         # an arm64 Vulkan driver (Mesa's Turnip) packed in the APK and used instead of the system's (DM_VK_DRIVER, dm/android/gfx_vk_core.c)
+    vulkan_driver: Path = None         # one arm64 Vulkan driver packed in the APK and selected at port time
+    vulkan_driver_dir: Path = None      # multiple arm64 drivers; the game's Graphics menu selects one at run time
     shared_font: Path = None           # a TrueType font packed as the system's shared fonts, instead of the device's Roboto (DM_SHARED_FONT, dm/host/hle_sdk16.c)
     firmware: Path = None              # the player's system content files (.nca), for the profile's sysdata titles (extract_sysdata; DM_SYSDATA, dm/host/hle_fs.c)
     mt_replay: bool = False            # multithread replay: DM_VK_MT_REPLAY=1 in env.txt (dm/android/gfx_vk_dq.c), after the profile's env rows
     touch: bool = False                # a game played by touch: the on-screen gamepad starts hidden (TOUCH_SETTINGS), so it takes none of the game's touches
     native_keyboard: bool = False      # optional Unicode Android IME (requires SDK/JDK)
     external_display: bool = False     # compile the optional external-screen activity with the Android SDK
+    frame_generation: bool = False     # include GameActivity's Lossless.dll picker for the optional LSFG feature
     vercode_offset: int = 0            # added to the APK's versionCode: a rebuild of the same game version installs over a build with a higher one (version_code)
     alias_headroom: int = None         # GB more alias region (alias_headroom); None: ALIAS_HEADROOM for a version the profile was not brought up on, none for one it was
     romfs_at: str = None               # with install: the folder on the device the app reads the RomFS from (porter/install.py), 'app' for its files folder; None: as the device has it
     romfs_push: bool = False           # with romfs_at: push the pack's RomFS into that folder first
-    jobs: int = field(default_factory=lambda: os.cpu_count() or 8)
+    jobs: int = field(default_factory=resources.safe_jobs)
 
 
 # --vulkan-driver: libadrenotools and its hooks (dm/android/build.py --adrenotools, from dm/third_party/libadrenotools), which load the driver for the app
@@ -207,12 +212,26 @@ class Port:
 
     def _run(self):
         o = self.o
+        o.jobs = resources.safe_jobs(o.jobs)
+        if resources.is_android():
+            total, available = resources.memory_mb()
+            say(f'Android memory-aware build: {o.jobs} worker(s) (RAM {total:.0f} MB, available {available:.0f} MB)' if total is not None and available is not None else f'Android memory-aware build: {o.jobs} worker(s) (RAM information unavailable; conservative limit)')
         o.folder = Path(o.folder).expanduser().resolve()
         if not o.folder.is_dir(): raise BuildError(f'not a folder: {o.folder}')
         version_code('v0', o.vercode_offset); alias_headroom_gb(o.alias_headroom)   # an offset or headroom out of range fails now, not after the shaders
+        if o.vulkan_driver and o.vulkan_driver_dir: raise BuildError('--vulkan-driver and --vulkan-driver-dir are mutually exclusive')
         if o.vulkan_driver:
             o.vulkan_driver = Path(o.vulkan_driver).expanduser().resolve()
             if not o.vulkan_driver.is_file() or o.vulkan_driver.suffix != '.so': raise BuildError(f'--vulkan-driver: not a .so library: {o.vulkan_driver}')
+        if o.vulkan_driver_dir:
+            o.vulkan_driver_dir = Path(o.vulkan_driver_dir).expanduser().resolve()
+            if not o.vulkan_driver_dir.is_dir(): raise BuildError(f'--vulkan-driver-dir: not a folder: {o.vulkan_driver_dir}')
+            drivers = sorted(p for p in o.vulkan_driver_dir.iterdir() if p.is_file() and p.suffix == '.so')
+            if not drivers: raise BuildError(f'--vulkan-driver-dir: no .so libraries in {o.vulkan_driver_dir}')
+            names = [driver_lib_name(p) for p in drivers]
+            reserved = set(ADRENOTOOLS_LIBS) | {'libdmhost.so'}
+            if len(names) != len(set(names)): raise BuildError(f'--vulkan-driver-dir: driver filenames collide after APK naming: {names}')
+            if reserved.intersection(names): raise BuildError(f'--vulkan-driver-dir: a driver uses a reserved APK library name: {reserved.intersection(names)}')
         if o.shared_font:
             o.shared_font = Path(o.shared_font).expanduser().resolve()
             if not o.shared_font.is_file() or o.shared_font.suffix.lower() != '.ttf': raise BuildError(f'--shared-font: not a .ttf font: {o.shared_font}')
@@ -318,8 +337,8 @@ class Port:
                 ups = [p for _, p in sorted(self.fam['updates'], key=lambda u: u[0] or 0)[-1:]]   # the survey reads the base game and the newest update
                 m = self.unpack([self.fam['base'], *ups])
                 fam = dict(self.fam, base=m[self.fam['base']], updates=[(v, m.get(p, p)) for v, p in self.fam['updates']])
-                facts = nsp.survey(self.o.folder, self.app, fam, self.o.keys, NXNATIVE, PY, self.env)
-                facts['survey'] = f'<NSP folder>/{tid}_survey/survey.md'
+                facts = nsp.survey(self.o.folder, self.app, fam, self.o.keys, NXNATIVE, PY, self.env, work_root=self.work)
+                facts['survey'] = str(self.work / f'{tid}_survey/survey.md')
                 nsp.write_profile(d, self.app, facts)
             self.provisional = True
             say('[RED] provisional game profile: values guessed from the survey, the game may not start')
@@ -668,6 +687,10 @@ class Port:
 
     # ---- shaders: upstream's split, then SPIR-V for the Vulkan backend ----
     def shaders(self):
+        # Extraction and earlier stages can change available RAM; recalculate immediately before
+        # the process-pool shader split, .NET translation and Zstandard bundle compression.
+        self.o.jobs = resources.safe_jobs(self.o.jobs)
+        self.env['J'] = str(self.o.jobs)
         if getattr(self, 'gl', False):   # an OpenGL ES game: the driver compiles its shaders on the device
             self.dmsv = None
             for st in ('shader split', 'Vulkan shaders'): PROG.stage(st); PROG.end('none: the game renders with OpenGL ES')
@@ -685,7 +708,7 @@ class Port:
         xlate, xkey = self.translator()
         PROG.set(step='checking the inputs')
         def input_key():
-            return nsp.fingerprint(nsp.package_key(pkg), ('files', [DM / 'android/tools' / name for name in ('shader_vk.py', 'dmsv.py', 'shader_products.py')] + nsp.tool_files(NXNATIVE)),
+            return nsp.fingerprint(nsp.package_key(pkg), ('files', [DM / 'android/tools' / name for name in ('shader_vk.py', 'dmsv.py', 'shader_products.py')] + nsp.vulkan_files(NXNATIVE)),
                                    ('files', nsp.profile_files(self.g)), xkey, product_cache.inventory(Path(xlate).parent),
                                    ('files', sorted(cap.glob('*.bin'))))
         key = input_key()
@@ -755,7 +778,7 @@ class Port:
         PROG.stage('host', step=f'NDK {self.tools["ndk"].name}')
         out = self.aw / ('host-debug' if self.o.debug else 'host')
         nsp.run([PY, DM / 'android/build.py', '--game', self.g.id, '--ndk', self.tools['ndk'], '--out', out, '--lib', '--jobs', str(self.o.jobs)] + ([] if self.o.debug else ['--release'])
-                + (['--adrenotools'] if self.o.vulkan_driver else []), self.logs / 'android_host.log', env=self.env)
+                + (['--adrenotools'] if self.o.vulkan_driver or getattr(self.o, 'vulkan_driver_dir', None) else []), self.logs / 'android_host.log', env=self.env)
         self.so = out / 'libdmhost.so'
         if not self.so.is_file(): raise BuildError(f'build.py made no {self.so}')
         ph = out / 'gen' / self.g.id / 'game_profile.h'   # the profile the host was built from, for the data pack (porter host compares it with its checkout's)
@@ -770,16 +793,28 @@ class Port:
         icon = self.icon()
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
-        external = self.external_activity() if self.o.external_display or self.o.native_keyboard else []
+        external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'frame_generation', False) or getattr(self.o, 'vulkan_driver_dir', None) else []
+        source_zip = build_source_archive(NXNATIVE.parent, self.so.parent / 'nx2android-source.zip', getattr(self.g, 'id', None) or 0x0100000000010000)
+        source_assets = ['--asset', f'source/nx2android-source.zip={source_zip}']
         driver = self.o.vulkan_driver
-        if driver and driver.name != driver_lib_name(driver):   # packed under a lib*.so name (driver_lib_name), copied beside the host library
+        bundled = []; driver_assets = []
+        if getattr(self.o, 'vulkan_driver_dir', None):
+            for source in sorted(p for p in getattr(self.o, 'vulkan_driver_dir', None).iterdir() if p.is_file() and p.suffix == '.so'):
+                target = self.so.parent / driver_lib_name(source)
+                if target.exists(): target.unlink()
+                shutil.copyfile(source, target); bundled.append(target)
+            manifest = self.so.parent / 'vulkan-drivers.txt'
+            manifest.write_text(''.join(p.name + '\n' for p in bundled), encoding='utf-8')
+            driver_assets = ['--asset', f'vulkan-drivers.txt={manifest}']
+            say(f'--vulkan-driver-dir: {len(bundled)} driver(s) bundled; choose one from the game\'s Graphics menu')
+        elif driver and driver.name != driver_lib_name(driver):
             driver = self.so.parent / driver_lib_name(driver); shutil.copyfile(self.o.vulkan_driver, driver)
             say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
                  '--version-code', str(code), '--version-name', self.display]
-                + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + ([] if self.o.debug else ['--release'])
+                + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + driver_assets + source_assets + ([] if self.o.debug else ['--release'])
                 + (['--game-mode-performance'] if getattr(self, 'gl', None) is False else [])   # only NVN implements the mode's pacing policy; GL keeps OEM interventions
-                + [a for f in ([driver] + [self.so.parent / n for n in ADRENOTOOLS_LIBS] if driver else []) for a in ('--extra-so', str(f))],
+                + [a for f in ((bundled or ([driver] if driver else [])) + ([self.so.parent / n for n in ADRENOTOOLS_LIBS] if (driver or bundled) else [])) for a in ('--extra-so', str(f))],
                 self.logs / 'android_apk.log', env=self.env)
         self.result['apk'] = str(self.apk_path)
         PROG.end(f'{self.apk_path.name}, {self.apk_path.stat().st_size / 2**20:.1f} MB')
@@ -791,7 +826,7 @@ class Port:
         d8s = [p for root in roots for p in (root / 'build-tools').glob('*/d8' + ('.bat' if os.name == 'nt' else ''))]
         def version(p): return tuple(int(x) for x in re.findall(r'\d+', p.parent.name))
         if not javac or not platforms or not d8s:
-            raise BuildError('--external-display / --native-keyboard needs javac and an Android SDK with a platform and build-tools (set ANDROID_HOME)')
+            raise BuildError('--external-display / --native-keyboard / --frame-generation / --vulkan-driver-dir needs javac and an Android SDK with a platform and build-tools (set ANDROID_HOME)')
         platform, d8 = max(platforms, key=version), max(d8s, key=version)
         out = self.aw / 'external-activity'; classes, dex = out / 'classes', out / 'dex'
         shutil.rmtree(out, ignore_errors=True); classes.mkdir(parents=True); dex.mkdir()

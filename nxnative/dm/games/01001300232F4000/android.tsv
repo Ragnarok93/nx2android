@@ -9,3 +9,4 @@ tested	v327680 Xiaomi 23117RK66C (Android 16)
 package	org.nx2a.t01001300232f4000
 orientation	landscape
 requires	bcn
+graphics	nvn

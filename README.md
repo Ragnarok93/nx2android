@@ -76,6 +76,29 @@ A controller whose A is the bottom button (Xbox labels, most Android devices' bu
 
 For Android's Unicode keyboard, port with `--native-keyboard`. It supports composed text, non-Latin scripts and emoji through the system IME, preserves initial text, and applies the guest's UTF-16 length limits. This option requires `javac` and an Android SDK with platform and build-tools (`ANDROID_HOME`). The default APK keeps the existing controller keyboard and does not require Java build tools. Combine `--external-display --native-keyboard` to opt into the native keyboard on an external-screen port; external display alone keeps the controller keyboard. The combined mode still needs runtime qualification over the full-screen phone gamepad.
 
+### Lossless Scaling frame generation
+
+Enable the optional frame-generation controls when porting a game with `--frame-generation` (or the desktop GUI checkbox). This builds the per-game Java Activity that supplies the document picker; the one-APK-per-game export remains unchanged.
+
+In the game's pause menu, open **Graphics**:
+- **Frame generation** turns LSFG on or off.
+- **Multiplier** cycles between 2x, 3x and 4x.
+- **Lossless.dll → Select** imports your own Windows `Lossless.dll` into the game's private app storage. Restart the game after importing it; the native host reads the DLL on startup.
+
+The DLL is proprietary and is never bundled or redistributed by this project. Frame generation also requires a Vulkan GPU/driver with the features LSFG needs; unsupported devices fall back to ordinary presentation and report the reason in `log.txt`. The default build includes the GPL-3.0-or-later LSFG engine, but the UI and DLL picker are opt-in per game. Advanced tuning is available in the game's `env.txt`: `DM_LSFG_TARGET=0` selects automatic output rate (or set an FPS target), and `DM_LSFG_FLOW=0` selects automatic optical-flow quality (or set 25–100). `DM_LSFG_MIN_FPS` defaults to 30.
+
+To include several Vulkan drivers in one game's APK, port with `--vulkan-driver-dir <folder>` (a folder of arm64 `.so` libraries). The APK includes the drivers and the pause menu's **Graphics → Vulkan driver** picker lets you choose a bundled driver or **System default**. The choice is saved in the game's `env.txt` and takes effect after restarting the game. This option needs `javac` and an Android SDK with platform and build-tools (`ANDROID_HOME`); `--vulkan-driver <file>` remains available to select one driver at port time.
+
+### Android port-time memory behavior
+
+Porting automatically limits memory-heavy worker concurrency using Android's total and currently available RAM. Devices with 8 GiB or less use one worker; 12 GiB devices use at most two; 16 GiB devices at most three; larger devices at most four. Below 4 GiB currently available, concurrency is reduced to at most two; below 3 GiB it is one. `--jobs` is an upper bound and cannot override the Android safety limit. This applies to shader splitting, Vulkan translation, shader-bundle Zstandard compression, and other port stages that share the worker setting.
+
+The Vulkan shader exporter memory-maps shader package files instead of retaining copies of every package in Python memory, and releases its per-shader translation jobs, control sections, package mappings, and translator results before compressing the final bundle. Bundle compression already uses a disk-backed spool and a bounded in-flight window, so it no longer overlaps with the full shader-translation working set.
+
+### Android runtime memory behavior
+
+The Vulkan backend bounds its retained buffer-pool caches to 64 MiB each (zero-copy reuse and small-pool slabs) and reclaims inactive, CPU-backed, read-only texture images when tracked Vulkan image allocations exceed 512 MiB. The texture-cache target can be changed in the game's `env.txt` with `DM_VK_TEXTURE_CACHE_MB` (64–4096; default 512). This eviction deliberately does not discard render targets, GPU-written images, sparse textures or active images because their contents may not be recoverable. These are cache limits, not a hard process/GPU-memory ceiling: active game resources, driver allocations, shader modules and Android's own memory pressure remain outside the app's control. Android may still terminate any app under severe system-wide pressure.
+
 For the experimental external-screen controller, port from the command line with `--external-display`. The game moves to a connected display and the phone shows the gamepad. In the pause menu's **Game → Audio output**, choose the phone, a connected output, or the system default; the list updates as devices connect or disconnect. Bluetooth call-only routes are omitted; the system may not honor the requested device. This option requires `javac` and an Android SDK with a platform and build-tools (`ANDROID_HOME`). Android 12 or newer uses the saved native layout; Android 10–11 use the fallback controller. Support varies by device and game.
 
 Already have the game on the device for an emulator? The app can read the game's files (its RomFS, most of its size) from that dump's folder instead of a second copy: type the dump's RomFS folder in the app's **RomFS on the device** field (or give it to `--romfs-at`) before you install, which must be the same game version as the port. [packaging/INSTALL.md](packaging/INSTALL.md#the-game-is-already-on-the-device) says how.
@@ -102,4 +125,4 @@ Nintendo's takedown notices so far have gone to whoever hosts a project (13 Swit
 
 ## License
 
-MIT, as nxnative (see `nxnative/LICENSE`). Third-party code keeps its own license.
+GPL-3.0-or-later for the combined program (see `LICENSE` and `NOTICE.md`). The original MIT notices are preserved in `nxnative/LICENSE-MIT-ORIGINAL` and `LICENSE-MIT-PORTER`; third-party components retain their own notices. Per-game APKs include the corresponding repository source archive at `assets/source/nx2android-source.zip`. The player's proprietary `Lossless.dll` is never included.

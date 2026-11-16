@@ -226,6 +226,10 @@ static void game_mode_sync(void) {   // presenting thread only: publish cached p
         LOG("[perf] Android Game Mode: %s", want ? "performance (game's own period)" : "default pacing policy");
     }
 }
+// The wait for the present thread is a pace, not work, when the frame generation is presenting extra images.
+__attribute__((weak)) int vk_fg_images(void) { return 1; }
+int64_t dm_perf_pq_pace(int64_t pq) { return (g_step > 0 || vk_fg_images() > 1) ? pq : 0; }
+
 static int64_t work_pct(int q) {   // the q-th percentile of the last 64 frames' work
     int n = g_nwork < 64 ? g_nwork : 64; if (n < 16) return 0;
     int64_t v[64]; memcpy(v, g_work_hist, sizeof(int64_t) * (size_t)n);
@@ -243,6 +247,7 @@ static int fps_cap_step(void) {
     if (s < 0) { s = dm_fps_ceiling() == 30 ? 2 : 0; if (s) LOG("[perf] frame rate capped at 30 fps (the profile's fps_ceiling; porter's --fps60 lifts it)"); }
     return s;
 }
+int dm_perf_rate_fps(void) { return (int)(1000000000ll / STEPS[g_step]); }   // frame generation: the host's adaptive 60/40/30 fps ceiling
 uint64_t dm_present_period_adapt(uint64_t period) {
     g_game_period = period;
     if (!period) return period;
@@ -356,7 +361,7 @@ void dm_perf_frame(double period) {
     { static unsigned n; if (++n % 60 == 0) gpu_turbo(); }
     if (g_work_start) {   // (a longer span: the game was held, by the pause menu or the background)
         int64_t w = g_prev_present ? t - g_prev_present - g_pace : t - g_work_start;
-        int64_t pq = g_prev_present ? g_pq : 0, pace = g_step > 0 ? pq : 0;   // (t - g_work_start starts after the wait already)
+        int64_t pq = g_prev_present ? g_pq : 0, pace = dm_perf_pq_pace(pq);   // (t - g_work_start starts after the wait already)
         if (w > 0 && w < 250000000) { adapt_frame(w - pace > 0 ? w - pace : 0, t); if (g_hint) hint_report(w, pq, pace, t, g_hint_target); }
         g_work_start = 0;
     }

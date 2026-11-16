@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #define VKLOG(...) ((void)0)
 #define VKRED_ONCE(...) ((void)0)
 typedef int pthread_mutex_t;
@@ -14,7 +15,7 @@ typedef int pthread_mutex_t;
 typedef struct { int depth,stencil,vk; } vkfmt_t;
 typedef struct vkimg {
     uint64_t pool,used,pkg_used,pkg_vgen,pkg_stamp,pkg_seen,pkg_hash;
-    int64_t off,size; int flags,looked,packaged,pkg_sparse,pkg_released,gpu_w;
+    int64_t off,size; uint64_t alloc_size; int flags,looked,packaged,pkg_sparse,pkg_released,gpu_w;
     const void *pkg_span,*pkg_mem,*lin_mem;size_t pkg_len,lin_len;
     void *img,*mem,*sub;
     struct vkimg *bc_draw; // No compressed-format stand-in in this family fixture.
@@ -25,7 +26,7 @@ static unsigned written,uploads,created,dropped;
 static unsigned char retired[4096];
 static uint64_t g_tex_frame;
 static const vkfmt_t *vk_fmt(int format) {static vkfmt_t f;f=(vkfmt_t){.vk=format};return &f;}
-static vkimg_t *img_new(const tex_t *t,const vkfmt_t *f) {(void)t;vkimg_t *im=calloc(1,sizeof *im);assert(im);im->format=f->vk;im->img=(void*)(uintptr_t)++created;assert(created<sizeof retired);return im;}
+static vkimg_t *img_new(const tex_t *t,const vkfmt_t *f) {(void)t;vkimg_t *im=calloc(1,sizeof *im);assert(im);im->format=f->vk;im->alloc_size=4096;im->img=(void*)(uintptr_t)++created;assert(created<sizeof retired);return im;}
 static void alias_link(vkimg_t *im) {(void)im;}
 static void alias_unlink(vkimg_t *im) {(void)im;}
 static void vk_lrz_forget(vkimg_t *im) {(void)im;}
@@ -115,6 +116,11 @@ int main(void) {
     assert(g_img_n==0 && g_by_key.n==0 && dropped==before+2);
     image=vk_tex_(&pa);assert(vk_tex_(&a)==image);assert(vk_tex_(&b)!=image);
     before=dropped;vk_tex_drop_pool(&pool);assert(g_img_n==0 && g_by_key.n==0 && dropped==before+2);
+    // The memory-pressure sweep may discard only old CPU-backed images whose contents can be uploaded again.
+    reset();a=base_tex(NVN_FORMAT_RGBA8,1);a.has_pkg_data=1;image=vk_tex_(&a);assert(image && image->packaged && image->pkg_mem);
+    g_tex_frame=61;assert(atomic_load(&g_img_bytes)==4096);assert(evict_one_idle_packaged());assert(!g_img_n && !g_by_key.n && atomic_load(&g_img_bytes)==0);
+    reset();a=base_tex(NVN_FORMAT_RGBA8,1);a.has_pkg_data=1;image=vk_tex_(&a);assert(image);image->gpu_w=1;g_tex_frame=61;
+    assert(!evict_one_idle_packaged() && g_img_n==1 && atomic_load(&g_img_bytes)==4096);reset();
     // A real differing layout remains different even with equal formats.
     b=a;b.serial=2;b.has_layout=1;b.d.pkg_block_h=2;assert(!same(a,b));a.d.pkg_block_h=2;assert(same(a,b));
     a=base_tex(NVN_FORMAT_RGBA8,1);b=base_tex(NVN_FORMAT_RGBA8_SRGB,2);

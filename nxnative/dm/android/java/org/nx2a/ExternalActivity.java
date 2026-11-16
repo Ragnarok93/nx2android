@@ -110,6 +110,11 @@ public class ExternalActivity extends NativeActivity implements ExternalDisplay.
         else if (pad instanceof OriginalPad) ((OriginalPad)pad).release();
     }
 
+    public void openDriverMenu() { runOnUiThread(() -> DriverPicker.show(this)); }
+    public void openLosslessPicker() { runOnUiThread(() -> LosslessPicker.show(this)); }
+    @Override protected void onActivityResult(int request, int result, android.content.Intent data) {
+        if (!LosslessPicker.onResult(this, request, result, data)) super.onActivityResult(request, result, data);
+    }
     public void openAudioMenu() { runOnUiThread(this::showAudioMenu); }
     private void showAudioMenu() {
         AudioManager manager = (AudioManager)getSystemService(Context.AUDIO_SERVICE);

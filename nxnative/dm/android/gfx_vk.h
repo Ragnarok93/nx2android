@@ -127,6 +127,7 @@ struct vkimg {
     uint32_t bc_lv, bc_ly, bc_nly;  // and the level and the layers (depth slices) of its last attachment view
     int bc_tried;                   // a block-compressed image: a stand-in was tried for it (one attempt: one log line, no image made at every pass)
     uint64_t pool; int64_t off, size; int flags;   // its storage (pool, offset, layout size) and NVN texture flags: images over the same memory find each other
+    uint64_t alloc_size;             // Vulkan memory requirement, distinct from the guest layout size above
     struct vkimg *ovl[8]; int novl;   // the other images over some of the same memory (a texture of another description over it: on the Switch it sees these texels)
     uint64_t wseq, rseen;             // when it was last rendered to (gfx_vk_tex.c g_wseq); the newest overlapping write already reported
 };

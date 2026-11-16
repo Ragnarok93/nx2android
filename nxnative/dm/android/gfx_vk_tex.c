@@ -270,6 +270,7 @@ static vkimg_t *img_new(const tex_t *t, const vkfmt_t *f) {
         ci.usage &= ~(VkImageUsageFlags)VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT; im->usage = ci.usage; r = vkCreateImage(V.dev, &ci, NULL, &im->img); }
     if (r) { VKRED_ONCE(10, "vkCreateImage failed (%d): %ux%ux%u format %#x (vk %d) target %d levels %u layers %u samples %u", r, im->w, im->h, im->d, d->format, f->vk, d->target, im->levels, im->layers, im->samples); free(im); return NULL; }
     VkMemoryRequirements req; vkGetImageMemoryRequirements(V.dev, im->img, &req);
+    im->alloc_size = req.size;
     if ((ci.usage & (VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT)) && im->w >= 256) { static int n; if (n++ < 16)   // UBWC check: a compressed target takes room for its metadata
         VKLOG("target %ux%u format %d%s: %llu bytes", im->w, im->h, f->vk, im->fixed_fmt ? " (format-listed)" : "", (unsigned long long)req.size); }
     VkDeviceSize moff;
@@ -390,9 +391,10 @@ extern uint64_t g_tex_frame;   // presents so far, for the packaged textures' la
 // after 20 minutes) and Android's low-memory killer ended the game. A new image takes over: the images of the same pool over its memory that were not looked up in the
 // last EVICT_KEEP presents go (their memory now holds another texture; one drawn again is made and filled again). Called with g_img_mu held
 enum { EVICT_KEEP = 60 };
-static uint64_t g_img_n, g_img_bytes, g_img_evicted;   // live images and their bytes, images evicted so far (vk_tex_sweep's line)
-static void img_drop(vkimg_t *im) { if (im->bc_draw) { vkimg_t *d = im->bc_draw; vk_lrz_forget(d); vk_tex_view_drop_all(d); if (d->sub) vk_defer_free_image_sub(d->img, d->sub); else vk_defer_free_image(d->img, d->mem); free(d); }
-    vk_lrz_forget(im); if (im->lin_mem) nvn_dirty_release(im->lin_mem, im->lin_len); if (im->packaged && !im->pkg_released && im->pkg_mem) nvn_dirty_release(im->pkg_mem, im->pkg_len); g_img_n--; g_img_bytes -= im->size > 0 ? (uint64_t)im->size : 0; alias_unlink(im); vk_tex_view_drop_all(im); if (im->sub) vk_defer_free_image_sub(im->img, im->sub); else vk_defer_free_image(im->img, im->mem); free(im); }
+static uint64_t g_img_n, g_img_evicted;   // live images and images evicted so far (vk_tex_sweep's line)
+static _Atomic uint64_t g_img_bytes;   // actual Vulkan image allocation requirements, including BC draw stand-ins
+static void img_drop(vkimg_t *im) { if (im->bc_draw) { vkimg_t *d = im->bc_draw; vk_lrz_forget(d); vk_tex_view_drop_all(d); if (d->sub) vk_defer_free_image_sub(d->img, d->sub); else vk_defer_free_image(d->img, d->mem); atomic_fetch_sub(&g_img_bytes, d->alloc_size); free(d); }
+    vk_lrz_forget(im); if (im->lin_mem) nvn_dirty_release(im->lin_mem, im->lin_len); if (im->packaged && !im->pkg_released && im->pkg_mem) nvn_dirty_release(im->pkg_mem, im->pkg_len); g_img_n--; atomic_fetch_sub(&g_img_bytes, im->alloc_size); alias_unlink(im); vk_tex_view_drop_all(im); if (im->sub) vk_defer_free_image_sub(im->img, im->sub); else vk_defer_free_image(im->img, im->mem); free(im); }
 static void evict_overlaps(uint64_t pool, int64_t off, int64_t size) {
     akey ks[64]; int n = 0;
     for (uint32_t i = 0; i < g_by_key.cap && n < 64; i++) {
@@ -400,6 +402,25 @@ static void evict_overlaps(uint64_t pool, int64_t off, int64_t size) {
         memcpy(&ks[n++], g_by_key.keys + (size_t)i * g_by_key.klen, sizeof(akey));
     }
     for (int j = 0; j < n; j++) { vkimg_t *o = nvn_hm_get(&g_by_key, &ks[j]); if (!o) continue; nvn_hm_del(&g_by_key, &ks[j]); img_drop(o); g_img_evicted++; }
+}
+// Reclaim only inactive, CPU-backed read-only textures. Render targets and any image the GPU has written
+// are deliberately retained: their contents may not exist in guest memory and cannot be reconstructed.
+static uint64_t texture_cache_budget(void) {
+    static uint64_t budget; if (budget) return budget;
+    const char *e = getenv("DM_VK_TEXTURE_CACHE_MB"); unsigned long mb = e && *e ? strtoul(e, NULL, 10) : 512;
+    if (!mb) mb = 512; if (mb < 64) mb = 64; if (mb > 4096) mb = 4096;
+    budget = (uint64_t)mb << 20; return budget;
+}
+static int evict_one_idle_packaged(void) {
+    vkimg_t *oldest = NULL; akey key = {0};
+    for (uint32_t i = 0; i < g_by_key.cap; i++) {
+        vkimg_t *im = g_by_key.vals[i];
+        if (!im || !im->packaged || !im->pkg_mem || im->pkg_sparse || im->gpu_w || im->bc_draw ||
+            g_tex_frame - im->used < EVICT_KEEP) continue;
+        if (!oldest || im->used < oldest->used) { oldest = im; memcpy(&key, g_by_key.keys + (size_t)i * g_by_key.klen, sizeof key); }
+    }
+    if (!oldest || nvn_hm_get(&g_by_key, &key) != oldest) return 0;
+    nvn_hm_del(&g_by_key, &key); img_drop(oldest); g_img_evicted++; return 1;
 }
 static vkimg_t *vk_tex_(const tex_t *t);
 vkimg_t *vk_tex(const tex_t *t) { extern int g_prof_on; extern uint64_t g_prof_ns[8]; struct timespec a, b; if (g_prof_on) clock_gettime(CLOCK_MONOTONIC, &a);
@@ -424,7 +445,7 @@ static vkimg_t *vk_tex_(const tex_t *t) {
         if (keyed) evict_overlaps(k.pool, t->off, (int64_t)t->L.size);
         im = img_new(t, vk_fmt(k.d.format)); if (!im) { pthread_mutex_unlock(&g_img_mu); return NULL; }
         if (k.family) im->family_formats = texture_family_bit(t->d.format);
-        im->pool = k.pool; im->off = t->off; im->size = (int64_t)t->L.size; im->flags = t->d.flags; g_img_n++; g_img_bytes += t->L.size;
+        im->pool = k.pool; im->off = t->off; im->size = (int64_t)t->L.size; im->flags = t->d.flags; g_img_n++; atomic_fetch_add(&g_img_bytes, im->alloc_size);
         if (keyed) { alias_link(im); nvn_hm_put(&g_by_key, &k, im); } else nvn_hm_put(&g_by_serial, &t->serial, im);
     }
     im->used = g_tex_frame;
@@ -490,10 +511,13 @@ void vk_tex_sweep(void) {
             runs = nvn_dirty_runs();
         }
     }
+    uint64_t reclaimed = 0, budget = texture_cache_budget();
+    while (atomic_load(&g_img_bytes) > budget && evict_one_idle_packaged()) reclaimed++;
     pthread_mutex_unlock(&g_img_mu);
     free(v);
     static uint64_t total; total += idle + lru;
-    if (g_tex_frame % 3000 == 0) VKLOG("images: %llu live, %.0f MB of textures, %llu evicted so far (a newer texture over their memory)", (unsigned long long)g_img_n, g_img_bytes / 1048576.0, (unsigned long long)g_img_evicted);
+    if (reclaimed) VKLOG("texture memory budget %.0f MB: evicted %llu inactive CPU-backed images; live Vulkan image allocations %.1f MB", budget / 1048576.0, (unsigned long long)reclaimed, atomic_load(&g_img_bytes) / 1048576.0);
+    if (g_tex_frame % 3000 == 0) VKLOG("images: %llu live, %.1f MB of Vulkan image allocations, %llu evicted so far", (unsigned long long)g_img_n, atomic_load(&g_img_bytes) / 1048576.0, (unsigned long long)g_img_evicted);
     if ((idle || lru) && (g_tex_frame % 3000 == 0 || lru)) VKLOG("packaged textures: %llu not drawn for %d presents and %llu least recently drawn released their write protection (%llu pages; %llu so far); %d protected runs",
                     (unsigned long long)idle, PKG_IDLE, (unsigned long long)lru, (unsigned long long)(nvn_dirty_released() - before), (unsigned long long)total, runs);
 }
@@ -689,7 +713,7 @@ VkImageView vk_tex_view_as(const tex_t *t, const view_t *vw, int dim, int arraye
               im->bc_tried = 1;
               tex_t ct = *t; ct.d.format = vw->format; ct.d.width = (int)bw; ct.d.height = (int)bh;
               vkimg_t *d = img_new(&ct, f);
-              if (d) { d->bc_of = im; im->bc_draw = d; }
+              if (d) { d->bc_of = im; im->bc_draw = d; atomic_fetch_add(&g_img_bytes, d->alloc_size); }
               static int n; if (n++ < 8) VKLOG("block-compressed image %ux%ux%u, %u levels (nvn format %#x), drawn into through views of format %#x: %s", im->w, im->h, im->d, im->levels, im->nvn_format, vw->format,
                                                d ? "its passes draw into a stand-in in blocks, filled from it before each and copied into it after (DM_VK_BC_DRAW)" : "the stand-in could not be made: drawn into itself"); }
           if (im->bc_draw) { im = im->bc_draw; im->bc_lv = lv0; im->bc_ly = ly0; im->bc_nly = nly; im->gpu_w = 1; if (img_out) *img_out = im; } } }

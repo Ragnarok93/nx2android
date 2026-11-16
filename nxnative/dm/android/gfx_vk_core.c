@@ -20,6 +20,7 @@
 #include <sys/socket.h>
 #include <time.h>
 #include <unistd.h>
+void crash_thread_init(void);   // per-thread alternate signal stack (dm.h)
 
 #define VK_DEF(f) PFN_##f f;
 VK_FNS(VK_DEF) VK_DEV_FNS(VK_DEF)
@@ -143,15 +144,20 @@ void vk_init(void) {
         Dl_info di; char dir[512] = "", dirs[520] = "";   // the APK's extracted libraries (mkapk.py: extractNativeLibs), where adrenotools finds its hooks and the driver
         if (dladdr((void *)vk_init, &di) && di.dli_fname && strrchr(di.dli_fname, '/')) {
             snprintf(dir, sizeof dir, "%.*s", (int)(strrchr(di.dli_fname, '/') - di.dli_fname), di.dli_fname); snprintf(dirs, sizeof dirs, "%s/", dir); }
+        // DM_VK_DRIVER may name a bundled library or an imported file path.
+        char drvdir[512] = "", drvname[256] = "";
+        const char *slash = strrchr(drv, '/');
+        if (slash) { snprintf(drvdir, sizeof drvdir, "%.*s/", (int)(slash - drv), drv); snprintf(drvname, sizeof drvname, "%s", slash + 1); }
+        else { snprintf(drvdir, sizeof drvdir, "%s", dirs); snprintf(drvname, sizeof drvname, "%s", drv); }
         void *at = dlopen("libadrenotools.so", RTLD_NOW | RTLD_LOCAL);
         void *(*open_vk)(int, int, const char *, const char *, const char *, const char *, const char *, void **) =
             at ? (void *(*)(int, int, const char *, const char *, const char *, const char *, const char *, void **))dlsym(at, "adrenotools_open_libvulkan") : NULL;
         if (!open_vk || !*dir) VKLOG("[RED] DM_VK_DRIVER %s: no libadrenotools in the APK (%s); the system's driver instead", drv, at ? "no adrenotools_open_libvulkan" : dlerror());
-        else if (!(lib = open_vk(RTLD_NOW | RTLD_LOCAL, 1 /* ADRENOTOOLS_DRIVER_CUSTOM */, NULL, dir, dirs, drv, NULL, NULL)))
+        else if (!(lib = open_vk(RTLD_NOW | RTLD_LOCAL, 1 /* ADRENOTOOLS_DRIVER_CUSTOM */, NULL, dir, drvdir, drvname, NULL, NULL)))
             VKLOG("[RED] DM_VK_DRIVER %s: adrenotools could not load it from %s; the system's driver instead", drv, dir);
         else if (!(p_vkGetInstanceProcAddr = (PFN_vkGetInstanceProcAddr)dlsym(lib, "vkGetInstanceProcAddr")) || !drv_has_gpu(p_vkGetInstanceProcAddr)) {
             VKLOG("[RED] DM_VK_DRIVER %s: no Vulkan 1.3 GPU through it; the system's driver instead", drv); lib = NULL; }   // (left loaded: a driver does not always unload cleanly)
-        else VKLOG("Vulkan driver %s through adrenotools, not the system's (%s)", drv, dir);
+        else VKLOG("Vulkan driver %s through adrenotools, not the system's (%s)", drvname, drvdir);
     }
     if (!lib) {
         if (!(lib = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL))) die("[vk] libvulkan.so: %s", dlerror());
@@ -414,7 +420,7 @@ static void pool_cache_sync(vkpool_t *p, int invalidate, uint64_t lo, uint64_t h
 // it was kept; the oldest the GPU is done with make room
 typedef struct { AHardwareBuffer *ahb; VkBuffer buf; VkDeviceMemory mem; uint64_t size, fence; } zcfree_t;
 enum { ZCF_N = 128 };
-#define ZCF_BYTES (384ull << 20)
+#define ZCF_BYTES (64ull << 20)   // bounded reuse cache for 8 GB-class Android devices
 static zcfree_t g_zcf[ZCF_N]; static int g_nzcf; static uint64_t g_zcf_bytes; static pthread_mutex_t g_zcf_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_zcf_hit, g_zcf_miss, g_zcf_kept;   // under g_zcf_mu (the pool line)
 uint64_t mtl_last_fence(void);
@@ -511,7 +517,14 @@ static int slab_take(uint64_t size, slab_t **out, uint32_t *slot) {   // 1: a sl
         pthread_mutex_unlock(&g_slab_mu);
         if (pass) break;
         slab_t *s = slab_new(c); if (!s) return 0;   // every slot taken or still the GPU's: a new slab, made outside the lock
-        pthread_mutex_lock(&g_slab_mu); s->next = g_slab[c]; g_slab[c] = s; g_slab_bytes += s->slot_bytes * s->nslot; pthread_mutex_unlock(&g_slab_mu);
+        pthread_mutex_lock(&g_slab_mu);
+        if (g_slab_bytes + s->slot_bytes * s->nslot > (64ull << 20)) {
+            pthread_mutex_unlock(&g_slab_mu);
+            vkDestroyBuffer(V.dev, s->buf, NULL); vkFreeMemory(V.dev, s->mem, NULL);
+            munmap(s->map, s->slot_bytes * s->nslot); if (s->fd >= 0) close(s->fd); AHardwareBuffer_release(s->ahb); free(s);
+            return 0;   // fall back to a dedicated pool buffer instead of growing the permanent slab cache
+        }
+        s->next = g_slab[c]; g_slab[c] = s; g_slab_bytes += s->slot_bytes * s->nslot; pthread_mutex_unlock(&g_slab_mu);
     }
     return 0;
 }
@@ -1677,7 +1690,7 @@ static void pass_spike_flush(void) {
     g_nsf = 0; g_sf_tot = 0;
 }
 static void *completion_main(void *a) {
-    (void)a; pthread_setname_np(pthread_self(), "dm-vk-complete");
+    (void)a; pthread_setname_np(pthread_self(), "dm-vk-complete"); crash_thread_init();
     for (;;) {
         pthread_mutex_lock(&g_cmu);
         while (!g_ch) pthread_cond_wait(&g_ccv, &g_cmu);

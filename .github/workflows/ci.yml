@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - fix/vulkan-shader-bundle-memory
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      title_id:
+        description: Existing Android game profile title ID
+        required: true
+        default: '0100000000010000'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  python-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: pip
+      - name: Install test dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile Python entry points
+        run: python -m py_compile gui/app.py porter/cli.py porter/pipeline.py nxnative/dm/android/tools/dmsv.py nxnative/dm/android/tools/shader_vk.py
+      - name: Run test suite
+        run: python -m unittest discover tests
+
+  android-build:
+    runs-on: ubuntu-latest
+    env:
+      TITLE_ID: ${{ inputs.title_id || '0100000000010000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK and NDK
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0" "ndk;27.2.12479018"
+      - name: Compile per-game NativeActivity Java classes
+        run: |
+          mkdir -p "$RUNNER_TEMP/nx2a-classes" "$RUNNER_TEMP/nx2a-dex"
+          javac -source 8 -target 8 -classpath "$ANDROID_HOME/platforms/android-35/android.jar" \
+            -d "$RUNNER_TEMP/nx2a-classes" nxnative/dm/android/java/org/nx2a/*.java
+          find "$RUNNER_TEMP/nx2a-classes" -name '*.class' -print0 | xargs -0 \
+            "$ANDROID_HOME/build-tools/35.0.0/d8" --min-api 29 \
+              --lib "$ANDROID_HOME/platforms/android-35/android.jar" \
+              --output "$RUNNER_TEMP/nx2a-dex"
+      - name: Build Android native host for the existing per-game APK target
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/27.2.12479018"
+          export TITLE_ID="${TITLE_ID^^}"
+          python nxnative/dm/android/build.py --game "$TITLE_ID" \
+            --ndk "$ANDROID_NDK_HOME" --out "$RUNNER_TEMP/nx2a-host" \
+            --lib --release --jobs 2
+      - name: Read the selected game's Android profile
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          title = os.environ["TITLE_ID"].upper()
+          profile = Path("nxnative/dm/games") / title / "android.tsv"
+          if not profile.is_file():
+              raise SystemExit(f"No Android profile found for {title}: {profile}")
+          fields = {}
+          for source in (profile.with_name("game.tsv"), profile):
+              if not source.is_file():
+                  continue
+              for line in source.read_text(encoding="utf-8").splitlines():
+                  if not line or line.startswith("#") or "\t" not in line:
+                      continue
+                  key, value = line.split("\t", 1)
+                  fields[key] = value
+          with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write("TITLE_ID=" + title + "\n")
+              env.write("APP_NAME=" + fields.get("name", title) + "\n")
+              package = fields.get("package", "org.nx2a.game" + title.lower())
+              if not package.endswith(".ci"):
+                  package += ".ci"
+              env.write("APP_PACKAGE=" + package + "\n")
+              env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\n")
+          PY
+      - name: Create the corresponding source archive
+        run: python porter/source_archive.py --root . --title-id "$TITLE_ID" --out "$RUNNER_TEMP/nx2android-source.zip"
+      - name: Package the per-game installable APK
+        run: |
+          args=()
+          if [ "$APP_LANDSCAPE" = "true" ]; then args+=(--landscape); fi
+          python nxnative/dm/android/apk/mkapk.py \
+            "$RUNNER_TEMP/nx2a-host/libdmhost.so" "$RUNNER_TEMP/nx2a-game.apk" \
+            "$RUNNER_TEMP/nx2a-signing-key.json" --package "$APP_PACKAGE" --label "$APP_NAME" \
+            --lib dmhost --dex "$RUNNER_TEMP/nx2a-dex/classes.dex" --activity org.nx2a.GameActivity \
+            --version-code 1 --version-name CI \
+            --asset "source/nx2android-source.zip=$RUNNER_TEMP/nx2android-source.zip" \
+            --release "${args[@]}"
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose "$RUNNER_TEMP/nx2a-game.apk"
+          {
+            echo "### Per-game APK smoke build"
+            echo "- Game: $APP_NAME ($TITLE_ID)"
+            echo "- Package: $APP_PACKAGE (the .ci suffix keeps this smoke build separate from an installed game)"
+            echo "- APK: `nx2a-game.apk`"
+            echo "- Corresponding source: `assets/source/nx2android-source.zip` (also attached separately)"
+            echo "- This APK contains the game-specific native host; the game data pack is separate and is not included because the runner has no game dump or keys."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nx2android-per-game-apk-smoke-build
+          path: |
+            ${{ runner.temp }}/nx2a-game.apk
+            ${{ runner.temp }}/nx2a-host/libdmhost.so
+            ${{ runner.temp }}/nx2a-dex/classes.dex
+            ${{ runner.temp }}/nx2android-source.zip
