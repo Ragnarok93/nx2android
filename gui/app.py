@@ -227,7 +227,8 @@ class PortTab(QWidget):
         if self.headroom.value() >= 0: args += ['--alias-headroom', str(self.headroom.value())]
         if self.fps60.isChecked(): args.append('--fps60')
         if self.touch.isChecked(): args.append('--touch')
-        if self.mt_replay.isChecked(): args.append('--mt-replay')\n        if self.frame_generation.isChecked(): args.append('--frame-generation')
+        if self.mt_replay.isChecked(): args.append('--mt-replay')
+        if self.frame_generation.isChecked(): args.append('--frame-generation')
         if self.driver.text().strip(): args += ['--vulkan-driver', self.driver.text().strip()]
         if self.driver_dir.text().strip(): args += ['--vulkan-driver-dir', self.driver_dir.text().strip()]
         if self.shared_font.text().strip(): args += ['--shared-font', self.shared_font.text().strip()]
