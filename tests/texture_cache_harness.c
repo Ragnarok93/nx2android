@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdatomic.h>
 #define VKLOG(...) ((void)0)
 #define VKRED_ONCE(...) ((void)0)
 typedef int pthread_mutex_t;
@@ -14,7 +15,7 @@ typedef int pthread_mutex_t;
 typedef struct { int depth,stencil,vk; } vkfmt_t;
 typedef struct vkimg {
     uint64_t pool,used,pkg_used,pkg_vgen,pkg_stamp,pkg_seen,pkg_hash;
-    int64_t off,size; int flags,looked,packaged,pkg_sparse,pkg_released,gpu_w;
+    int64_t off,size; uint64_t alloc_size; int flags,looked,packaged,pkg_sparse,pkg_released,gpu_w;
     const void *pkg_span,*pkg_mem,*lin_mem;size_t pkg_len,lin_len;
     void *img,*mem,*sub;
     struct vkimg *bc_draw; // No compressed-format stand-in in this family fixture.
