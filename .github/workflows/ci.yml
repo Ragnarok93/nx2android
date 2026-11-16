@@ -80,6 +80,7 @@ jobs:
               key, value = line.split("\\t", 1)
               fields[key] = value
           with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as env:
+              env.write("TITLE_ID=" + title + "\\n")
               env.write("APP_NAME=" + fields.get("name", title) + "\\n")
               env.write("APP_PACKAGE=" + fields.get("package", "org.nx2a.game" + title.lower()) + "\\n")
               env.write("APP_LANDSCAPE=" + str(fields.get("orientation", "landscape") == "landscape").lower() + "\\n")
