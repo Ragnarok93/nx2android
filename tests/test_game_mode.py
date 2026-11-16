@@ -177,7 +177,7 @@ class GameMode(unittest.TestCase):
             asset = args[args.index('--asset') + 1]
             self.assertTrue(asset.startswith('vulkan-drivers.txt='))
             self.assertEqual(Path(asset.split('=', 1)[1]).read_text().splitlines(),
-                             ['libvulkan.purple.so', 'libvulkan_freedreno.so'])
+                             ['libvulkan_freedreno.so', 'libvulkan.purple.so'])
 
     def test_native_policy_and_explicit_overrides(self):
         source = (ANDROID/'perf_android.c').read_text(encoding='utf-8')
