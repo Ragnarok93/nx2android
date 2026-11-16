@@ -783,19 +783,22 @@ class Port:
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
         external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'vulkan_driver_dir', None) else []
         driver = self.o.vulkan_driver
-        bundled = []
+        bundled = []; driver_assets = []
         if getattr(self.o, 'vulkan_driver_dir', None):
             for source in sorted(p for p in getattr(self.o, 'vulkan_driver_dir', None).iterdir() if p.is_file() and p.suffix.lower() == '.so'):
                 target = self.so.parent / driver_lib_name(source)
                 if target.exists(): target.unlink()
                 shutil.copyfile(source, target); bundled.append(target)
+            manifest = self.so.parent / 'vulkan-drivers.txt'
+            manifest.write_text(''.join(p.name + '\n' for p in bundled), encoding='utf-8')
+            driver_assets = ['--asset', f'vulkan-drivers.txt={manifest}']
             say(f'--vulkan-driver-dir: {len(bundled)} driver(s) bundled; choose one from the game\'s Graphics menu')
         elif driver and driver.name != driver_lib_name(driver):
             driver = self.so.parent / driver_lib_name(driver); shutil.copyfile(self.o.vulkan_driver, driver)
             say(f'--vulkan-driver: {self.o.vulkan_driver.name} is packed as {driver.name} (Android extracts only lib*.so libraries)')
         nsp.run([PY, DM / 'android/apk/mkapk.py', self.so, self.apk_path, paths.signing_key(), '--package', self.package, '--label', self.app_name, '--lib', 'dmhost',
                  '--version-code', str(code), '--version-name', self.display]
-                + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + ([] if self.o.debug else ['--release'])
+                + (['--landscape'] if self.ap.landscape else []) + icon + self.theme() + self.ui_font() + external + driver_assets + ([] if self.o.debug else ['--release'])
                 + (['--game-mode-performance'] if getattr(self, 'gl', None) is False else [])   # only NVN implements the mode's pacing policy; GL keeps OEM interventions
                 + [a for f in ((bundled or ([driver] if driver else [])) + ([self.so.parent / n for n in ADRENOTOOLS_LIBS] if (driver or bundled) else [])) for a in ('--extra-so', str(f))],
                 self.logs / 'android_apk.log', env=self.env)
