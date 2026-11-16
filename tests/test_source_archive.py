@@ -17,6 +17,7 @@ class SourceArchive(unittest.TestCase):
             for name in (
                 "LICENSE",
                 "NOTICE.md",
+                "LICENSE-MIT-PORTER",
                 "nxnative/LICENSE",
                 "nxnative/LICENSE-MIT-ORIGINAL",
                 "nxnative/dm/android/build.py",
