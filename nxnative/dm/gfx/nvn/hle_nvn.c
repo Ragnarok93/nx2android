@@ -1295,7 +1295,7 @@ static pthread_mutex_t g_job_mu = PTHREAD_MUTEX_INITIALIZER; static pthread_cond
 static int nvn_async(void) { static int on = -1; if (on < 0) { const char *e = getenv("DM_NVN_ASYNC"); on = e && atoi(e); } return on; }
 static void submit_now(NVNqueue *q, int n, const NVNcommandHandle *h);
 static void *replay_main(void *arg) {
-    (void)arg; pthread_setname_np(pthread_self(), "nvn replay"); dm_perf_replay_thread(); crash_thread_init();
+    (void)arg; pthread_setname_np(pthread_self(), "nvn replay"); dm_perf_replay_thread(); { void crash_thread_init(void); crash_thread_init(); }
     for (;;) {
         pthread_mutex_lock(&g_job_mu); while (!g_njob) pthread_cond_wait(&g_job_cv, &g_job_mu);
         nvn_job j = g_jobs[0]; pthread_mutex_unlock(&g_job_mu);

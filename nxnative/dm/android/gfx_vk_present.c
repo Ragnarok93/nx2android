@@ -15,6 +15,7 @@
 #include "overlay_frag.spv.h"
 #include "rot_vert.spv.h"
 #include "rot_frag.spv.h"
+void crash_thread_init(void);   // per-thread alternate signal stack (dm.h)
 
 __attribute__((weak)) ANativeWindow *dm_front_window(void) { return NULL; }
 __attribute__((weak)) int dm_external_active(void) { return 0; }
