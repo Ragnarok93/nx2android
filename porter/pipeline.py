@@ -786,7 +786,7 @@ class Port:
         code = version_code(self.pkg_ver, self.o.vercode_offset)
         if self.o.vercode_offset: say(f'versionCode {code} ({self.pkg_ver} + 1 + offset {self.o.vercode_offset})')
         external = self.external_activity() if self.o.external_display or self.o.native_keyboard or getattr(self.o, 'frame_generation', False) or getattr(self.o, 'vulkan_driver_dir', None) else []
-        source_zip = build_source_archive(NXNATIVE.parent, self.so.parent / 'nx2android-source.zip', self.g.id)
+        source_zip = build_source_archive(NXNATIVE.parent, self.so.parent / 'nx2android-source.zip', getattr(self.g, 'id', 0x0100000000010000))
         source_assets = ['--asset', f'source/nx2android-source.zip={source_zip}']
         driver = self.o.vulkan_driver
         bundled = []; driver_assets = []
