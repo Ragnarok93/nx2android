@@ -23,6 +23,8 @@ int dm_fg_frame(vkimg_t *im, const int *crop, double period, VkImage gen[3], dou
 
 // The drawer's live switch and status line (the reason string follows the state int, Banana's "<state> <reason>")
 void dm_fg_set(int on, int multiplier, int target_rate, int flow_pct);
+int dm_fg_enabled(void);
+void dm_fg_enable(int on);
 int dm_fg_status(char *buf, int n);
 
 // The refresh the display timing last saw (ns; 0 without VK_GOOGLE_display_timing): the refresh cap's input
