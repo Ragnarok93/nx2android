@@ -420,7 +420,7 @@ static void pool_cache_sync(vkpool_t *p, int invalidate, uint64_t lo, uint64_t h
 // it was kept; the oldest the GPU is done with make room
 typedef struct { AHardwareBuffer *ahb; VkBuffer buf; VkDeviceMemory mem; uint64_t size, fence; } zcfree_t;
 enum { ZCF_N = 128 };
-#define ZCF_BYTES (384ull << 20)
+#define ZCF_BYTES (64ull << 20)   // bounded reuse cache for 8 GB-class Android devices
 static zcfree_t g_zcf[ZCF_N]; static int g_nzcf; static uint64_t g_zcf_bytes; static pthread_mutex_t g_zcf_mu = PTHREAD_MUTEX_INITIALIZER;
 static uint64_t g_zcf_hit, g_zcf_miss, g_zcf_kept;   // under g_zcf_mu (the pool line)
 uint64_t mtl_last_fence(void);
@@ -517,7 +517,14 @@ static int slab_take(uint64_t size, slab_t **out, uint32_t *slot) {   // 1: a sl
         pthread_mutex_unlock(&g_slab_mu);
         if (pass) break;
         slab_t *s = slab_new(c); if (!s) return 0;   // every slot taken or still the GPU's: a new slab, made outside the lock
-        pthread_mutex_lock(&g_slab_mu); s->next = g_slab[c]; g_slab[c] = s; g_slab_bytes += s->slot_bytes * s->nslot; pthread_mutex_unlock(&g_slab_mu);
+        pthread_mutex_lock(&g_slab_mu);
+        if (g_slab_bytes + s->slot_bytes * s->nslot > (64ull << 20)) {
+            pthread_mutex_unlock(&g_slab_mu);
+            vkDestroyBuffer(V.dev, s->buf, NULL); vkFreeMemory(V.dev, s->mem, NULL);
+            munmap(s->map, s->slot_bytes * s->nslot); if (s->fd >= 0) close(s->fd); AHardwareBuffer_release(s->ahb); free(s);
+            return 0;   // fall back to a dedicated pool buffer instead of growing the permanent slab cache
+        }
+        s->next = g_slab[c]; g_slab[c] = s; g_slab_bytes += s->slot_bytes * s->nslot; pthread_mutex_unlock(&g_slab_mu);
     }
     return 0;
 }
